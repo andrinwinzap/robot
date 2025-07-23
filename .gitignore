@@ -3,5 +3,5 @@ install
 log
 realtime_tools
 .venv
-.onshape-to-robot-assets
-.onshape-to-robot.urdf
+.assets
+.urdf

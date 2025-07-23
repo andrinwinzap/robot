@@ -17,9 +17,9 @@ def post_import_commands(base_dir: str):
     urdf_output_dir = os.path.join(base_dir, "../urdf")
     os.makedirs(urdf_output_dir, exist_ok=True)
 
-    shutil.copy(os.path.join(base_dir, ".onshape-to-robot.urdf"), os.path.join(urdf_output_dir, "r6bot.urdf"))
+    shutil.copy(os.path.join(base_dir, ".urdf"), os.path.join(urdf_output_dir, "r6bot.urdf"))
 
-    meshes_src = os.path.join(base_dir, ".onshape-to-robot-assets/merged")
+    meshes_src = os.path.join(base_dir, ".assets/merged")
     meshes_dst = os.path.join(base_dir, "../meshes")
     if os.path.exists(meshes_src):
         if os.path.exists(meshes_dst):
@@ -46,8 +46,8 @@ def replace_meshes_path(urdf_path: str):
 
     for mesh in root.iter('mesh'):
         filename = mesh.attrib.get('filename')
-        if filename and filename.startswith('package://.onshape-to-robot-assets/merged'):
-            new_filename = filename.replace('package://.onshape-to-robot-assets/merged', 'package://meshes')
+        if filename and filename.startswith('package://.assets/merged'):
+            new_filename = filename.replace('package://.assets/merged', 'package://meshes')
             mesh.set('filename', new_filename)
 
     tree.write(urdf_path)
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     export_robot(current_dir)
 
-    urdf_path = os.path.join(current_dir, ".onshape-to-robot.urdf")
+    urdf_path = os.path.join(current_dir, ".urdf")
     clean_base_link(urdf_path)
     replace_meshes_path(urdf_path)
 

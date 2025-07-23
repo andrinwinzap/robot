@@ -10,7 +10,7 @@
     <visual>
       <origin xyz="1.56892e-07 -0.000137144 0.0615947" rpy="0 -0 0" />
       <geometry>
-        <mesh filename="package://meshes/link_1_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_1_visual.stl" />
       </geometry>
       <material name="link_1_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -19,7 +19,7 @@
     <collision>
       <origin xyz="1.56892e-07 -0.000137144 0.0615947" rpy="0 -0 0" />
       <geometry>
-        <mesh filename="package://meshes/link_1_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_1_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -34,7 +34,7 @@
     <visual>
       <origin xyz="-6.10023e-07 -0.0383285 -0.043327" rpy="3.14159 2.21112e-32 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_2_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_2_visual.stl" />
       </geometry>
       <material name="link_2_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -43,7 +43,7 @@
     <collision>
       <origin xyz="-6.10023e-07 -0.0383285 -0.043327" rpy="3.14159 2.21112e-32 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_2_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_2_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -58,7 +58,7 @@
     <visual>
       <origin xyz="-0.0748564 0.0766746 -0.028902" rpy="1.5708 -1.94096e-14 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_3_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_3_visual.stl" />
       </geometry>
       <material name="link_3_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -67,7 +67,7 @@
     <collision>
       <origin xyz="-0.0748564 0.0766746 -0.028902" rpy="1.5708 -1.94096e-14 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_3_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_3_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -82,7 +82,7 @@
     <visual>
       <origin xyz="-1.79188e-07 -0.0306184 -0.0370489" rpy="-1.5708 1.94243e-14 2.30911" />
       <geometry>
-        <mesh filename="package://meshes/link_4_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_4_visual.stl" />
       </geometry>
       <material name="link_4_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -91,7 +91,7 @@
     <collision>
       <origin xyz="-1.79188e-07 -0.0306184 -0.0370489" rpy="-1.5708 1.94243e-14 2.30911" />
       <geometry>
-        <mesh filename="package://meshes/link_4_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_4_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -106,7 +106,7 @@
     <visual>
       <origin xyz="-1.82907e-07 -0.00076381 -0.0682148" rpy="-3.14159 -0.832485 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_5_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_5_visual.stl" />
       </geometry>
       <material name="link_5_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -115,7 +115,7 @@
     <collision>
       <origin xyz="-1.82907e-07 -0.00076381 -0.0682148" rpy="-3.14159 -0.832485 3.14159" />
       <geometry>
-        <mesh filename="package://meshes/link_5_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_5_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -130,7 +130,7 @@
     <visual>
       <origin xyz="0.00218112 0.000356863 1.16162e-05" rpy="1.5708 3.87166e-15 -2.30911" />
       <geometry>
-        <mesh filename="package://meshes/link_6_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_6_visual.stl" />
       </geometry>
       <material name="link_6_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -139,7 +139,7 @@
     <collision>
       <origin xyz="0.00218112 0.000356863 1.16162e-05" rpy="1.5708 3.87166e-15 -2.30911" />
       <geometry>
-        <mesh filename="package://meshes/link_6_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_6_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -154,7 +154,7 @@
     <visual>
       <origin xyz="-0.000274308 -0.000815168 -0.0322826" rpy="1.60365e-13 -0.900467 1.5708" />
       <geometry>
-        <mesh filename="package://meshes/link_7_visual.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_7_visual.stl" />
       </geometry>
       <material name="link_7_parts_material">
         <color rgba="0.5 0.5 0.5 1" />
@@ -163,7 +163,7 @@
     <collision>
       <origin xyz="-0.000274308 -0.000815168 -0.0322826" rpy="1.60365e-13 -0.900467 1.5708" />
       <geometry>
-        <mesh filename="package://meshes/link_7_collision.stl" />
+        <mesh filename="package://r6bot_description/meshes/link_7_collision.stl" />
       </geometry>
     </collision>
   </link>

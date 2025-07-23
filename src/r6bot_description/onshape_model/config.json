@@ -4,7 +4,6 @@
     "color": [0.5, 0.5, 0.5, 1.0],
     "merge_stls": true,
     "robot_name": "r6bot",
-    "package_name": "r6bot_description",
     "additional_xml": "ros2_control.xml",
     "output_filename": "r6bot",
     "add_dummy_base_link": true,

@@ -19,12 +19,12 @@ def post_import_commands(base_dir: str):
 
     shutil.copy(os.path.join(base_dir, "r6bot.urdf"), urdf_output_dir)
 
-    assets_src = os.path.join(base_dir, "assets")
-    assets_dst = os.path.join(base_dir, "../assets")
-    if os.path.exists(assets_src):
-        if os.path.exists(assets_dst):
-            shutil.rmtree(assets_dst)
-        shutil.copytree(assets_src, assets_dst)
+    meshes_src = os.path.join(base_dir, "assets/merged")
+    meshes_dst = os.path.join(base_dir, "../meshes")
+    if os.path.exists(meshes_src):
+        if os.path.exists(meshes_dst):
+            shutil.rmtree(meshes_dst)
+        shutil.copytree(meshes_src, meshes_dst)
 
 def clean_base_link(urdf_path: str):
     tree = ET.parse(urdf_path)
@@ -40,11 +40,24 @@ def clean_base_link(urdf_path: str):
     tree.write(urdf_path)
     tree.write(urdf_path)
 
+def replace_meshes_path(urdf_path: str):
+    tree = ET.parse(urdf_path)
+    root = tree.getroot()
+
+    for mesh in root.iter('mesh'):
+        filename = mesh.attrib.get('filename')
+        if filename and filename.startswith('package://assets/merged'):
+            new_filename = filename.replace('package://assets/merged', 'package://meshes')
+            mesh.set('filename', new_filename)
+
+    tree.write(urdf_path)
+
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     export_robot(current_dir)
 
     urdf_path = os.path.join(current_dir, "r6bot.urdf")
     clean_base_link(urdf_path)
-
+    replace_meshes_path(urdf_path)
+    
     post_import_commands(current_dir)

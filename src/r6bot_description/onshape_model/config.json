@@ -5,7 +5,7 @@
     "merge_stls": true,
     "robot_name": "r6bot",
     "additional_xml": "ros2_control.xml",
-    "output_filename": "r6bot",
+    "output_filename": "onshape-to-robot",
     "add_dummy_base_link": true,
     "include_configuration_suffix": false
 }

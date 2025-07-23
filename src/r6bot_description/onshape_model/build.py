@@ -17,7 +17,7 @@ def post_import_commands(base_dir: str):
     urdf_output_dir = os.path.join(base_dir, "../urdf")
     os.makedirs(urdf_output_dir, exist_ok=True)
 
-    shutil.copy(os.path.join(base_dir, "r6bot.urdf"), urdf_output_dir)
+    shutil.copy(os.path.join(base_dir, "onshape-to-robot.urdf"), os.path.join(urdf_output_dir, "r6bot.urdf"))
 
     meshes_src = os.path.join(base_dir, "assets/merged")
     meshes_dst = os.path.join(base_dir, "../meshes")
@@ -56,8 +56,8 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     export_robot(current_dir)
 
-    urdf_path = os.path.join(current_dir, "r6bot.urdf")
+    urdf_path = os.path.join(current_dir, "onshape-to-robot.urdf")
     clean_base_link(urdf_path)
     replace_meshes_path(urdf_path)
-    
+
     post_import_commands(current_dir)

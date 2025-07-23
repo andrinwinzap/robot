@@ -1,0 +1,12 @@
+{
+    "url": "https://cad.onshape.com/documents/35244f3032e1dd11e6e40d38/w/ff4e0b78bc305b470c9c54d8/e/67b9fda3e47a6e7d889f8684",
+    "output_format": "urdf",
+    "color": [0.5, 0.5, 0.5, 1.0],
+    "merge_stls": true,
+    "robot_name": "r6bot",
+    "package_name": "r6bot_description",
+    "additional_xml": "ros2_control.xml",
+    "output_filename": "r6bot",
+    "add_dummy_base_link": true,
+    "include_configuration_suffix": false
+}

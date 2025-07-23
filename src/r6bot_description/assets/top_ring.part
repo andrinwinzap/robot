@@ -1,0 +1,13 @@
+{
+    "configuration": "List_CfSUz49F4URNXA=Default;List_eF2oVdu1xlGdxF=Default;Shaft_Cutout=false",
+    "documentId": "35244f3032e1dd11e6e40d38",
+    "documentMicroversion": "8818a35d6546996df188a1ff",
+    "elementId": "a22bbaa802f93b8cb3bdc05b",
+    "fullConfiguration": "List_CfSUz49F4URNXA=Default;List_eF2oVdu1xlGdxF=Default;Shaft_Cutout=false",
+    "id": "MmF2fkguQlvPRza7z",
+    "isStandardContent": false,
+    "name": "Top Ring <1>",
+    "partId": "JzD",
+    "suppressed": false,
+    "type": "Part"
+}

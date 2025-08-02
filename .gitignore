@@ -5,3 +5,4 @@ realtime_tools
 .venv
 .assets
 .urdf
+.vscode

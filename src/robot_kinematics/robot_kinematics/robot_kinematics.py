@@ -16,6 +16,15 @@ D6 = 58.13
 L2 = 200
 D4 = 188.5
 
+JOINT_LIMITS = [
+    (-np.pi, np.pi),
+    (-np.pi, np.pi),
+    (-np.pi, np.pi),
+    (-np.pi, np.pi),
+    (-np.pi/2, np.pi/2),        
+    (-np.pi, np.pi)       
+]
+
 DH_Params = [
     {theta: theta_1, d: D1, alpha: pi/2, a: 0},
     {theta: theta_2 + (pi/2), d: D2, alpha: 0, a: L2},
@@ -51,6 +60,12 @@ T_06_func = lambdify(thetas, T_06_symbolic, modules='numpy')
 
 T_01_func = lambdify((theta_1,), T_01_symbolic, modules="numpy")
 R_03_func = lambdify((theta_1, theta_2, theta_3), T_03_symbolic[:3, :3], modules="numpy")
+
+def check_limits(joint_angles):
+    for angle, (low, high) in zip(joint_angles, JOINT_LIMITS):
+        if not (low <= angle <= high):
+            return False
+    return True
 
 def forward_kinematics(thetas):
     return T_06_func(*thetas)
@@ -137,8 +152,11 @@ def inverse_kinematics(T_06):
             T_36_solutions = [(q4[0], q5[0], q6[0])]
 
         for solution in T_36_solutions:
-            q4,q5,q6 = solution
-            T_06_solutions.append([q1, q2, q3, q4, q5, q6])
+            if check_limits(solution):
+                q4,q5,q6 = solution
+                T_06_solutions.append([q1, q2, q3, q4, q5, q6])
+            else:
+                print(f"not within limits: {solution}")
 
     return T_06_solutions
 

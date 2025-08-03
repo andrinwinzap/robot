@@ -67,6 +67,9 @@ def check_limits(joint_angles):
             return False
     return True
 
+def normalize_angle(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
 def forward_kinematics(thetas):
     return T_06_func(*thetas)
 
@@ -151,12 +154,10 @@ def inverse_kinematics(T_06):
                 q5[0] = np.pi
             T_36_solutions = [(q4[0], q5[0], q6[0])]
 
-        for solution in T_36_solutions:
-            if check_limits(solution):
-                q4,q5,q6 = solution
-                T_06_solutions.append([q1, q2, q3, q4, q5, q6])
-            else:
-                print(f"not within limits: {solution}")
+    for T_36_solution in T_36_solutions:
+        T_06_solution = [normalize_angle(q) for q in [q1, q2, q3, *T_36_solution]]
+        if check_limits(T_06_solution):
+            T_06_solutions.append(T_06_solution)
 
     return T_06_solutions
 

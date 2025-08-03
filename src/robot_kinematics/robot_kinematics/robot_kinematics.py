@@ -26,9 +26,9 @@ JOINT_LIMITS = [
 ]
 
 DH_Params = [
-    {theta: theta_1, d: D1, alpha: pi/2, a: 0},
-    {theta: theta_2 + (pi/2), d: D2, alpha: 0, a: L2},
-    {theta: theta_3 - (pi/2), d: 0, alpha: -pi/2, a: 0},
+    {theta: theta_1, d: D1, alpha: -pi/2, a: 0},
+    {theta: theta_2 - (pi/2), d: D2, alpha: 0, a: L2},
+    {theta: theta_3 + (pi/2), d: 0, alpha: pi/2, a: 0},
     {theta: theta_4, d: D4, alpha: -pi/2, a: 0},
     {theta: theta_5, d: 0, alpha: pi/2, a: 0},
     {theta: theta_6, d: D6, alpha: 0, a: 0}
@@ -81,7 +81,7 @@ def inverse_kinematics(T_06):
     planar_dist = np.hypot(P_04[0], P_04[1])
     phi = np.arcsin(np.clip(D2 / planar_dist, -1.0, 1.0))
     theta = np.arctan2(P_04[1], P_04[0])
-    q1 = [theta + (np.pi - phi), theta + phi]
+    q1 = [theta - phi, theta + (np.pi + phi)]
     
     # Calculate q3
     T_01 = T_01_func(q1[0])

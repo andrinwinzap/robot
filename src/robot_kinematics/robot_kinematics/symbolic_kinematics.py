@@ -1,6 +1,6 @@
 # symbolic_kinematics.py
 
-from sympy import cos, sin, symbols, pi, Matrix, lambdify
+from sympy import cos, sin, symbols, pi, Matrix, lambdify, simplify, diff
 from .config import LINK_LENGTHS, JOINT_OFFSETS
 
 theta, d, alpha, a = symbols('theta d alpha a')
@@ -17,6 +17,7 @@ DH_Params = [
     {theta: theta_6, d: JOINT_OFFSETS["D6"], alpha: 0, a: 0}
 ]
 
+# Homogeneous transformation matrix
 HTM_symbolic = Matrix([
     [cos(theta), -sin(theta)*cos(alpha),  sin(theta)*sin(alpha), a*cos(theta)],
     [sin(theta),  cos(theta)*cos(alpha), -cos(theta)*sin(alpha), a*sin(theta)],
@@ -24,6 +25,7 @@ HTM_symbolic = Matrix([
     [0, 0, 0, 1]
 ])
 
+# Symbolic forward kinematics
 T_01_symbolic = HTM_symbolic.subs(DH_Params[0])
 T_12_symbolic = HTM_symbolic.subs(DH_Params[1])
 T_23_symbolic = HTM_symbolic.subs(DH_Params[2])
@@ -39,6 +41,34 @@ T_06_symbolic = T_05_symbolic * T_56_symbolic
 
 T_36_symbolic = T_34_symbolic * T_45_symbolic * T_56_symbolic
 
+# Jacobian
+x = T_06_symbolic[0, 3]
+y = T_06_symbolic[1, 3]
+z = T_06_symbolic[2, 3]
+
+omega_hat_0_1 = T_01_symbolic[:3, 2]
+omega_hat_0_2 = T_02_symbolic[:3, 2]
+omega_hat_0_3 = T_03_symbolic[:3, 2]
+omega_hat_0_4 = T_04_symbolic[:3, 2]
+omega_hat_0_5 = T_05_symbolic[:3, 2]
+omega_haT_06_symbolic = T_06_symbolic[:3, 2]
+
+theta_list = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
+omega_list = [omega_hat_0_1, omega_hat_0_2, omega_hat_0_3, omega_hat_0_4, omega_hat_0_5, omega_haT_06_symbolic]
+
+cols = []
+for i in range(6):
+    dx = diff(x, theta_list[i])
+    dy = diff(y, theta_list[i])
+    dz = diff(z, theta_list[i])
+    omega = omega_list[i]
+    col = Matrix([dx, dy, dz, omega[0], omega[1], omega[2]])
+    cols.append(col)
+
+J_symbolic = simplify(Matrix.hstack(*cols))
+
+# Numerical funcions
 T_06_func = lambdify(thetas, T_06_symbolic, modules='numpy')
 T_01_func = lambdify((theta_1,), T_01_symbolic, modules="numpy")
 R_03_func = lambdify((theta_1, theta_2, theta_3), T_03_symbolic[:3, :3], modules="numpy")
+J_func = lambdify(thetas, J_symbolic, modules='numpy')

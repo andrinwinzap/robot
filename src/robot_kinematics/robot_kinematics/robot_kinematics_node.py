@@ -1,4 +1,5 @@
 # kinematics_node.py
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -12,10 +13,20 @@ class KinematicsNode(Node):
     def __init__(self):
         super().__init__('robot_kinematics_node')
 
+        self.joint_names = [
+            "joint_1",
+            "joint_2",
+            "joint_3",
+            "joint_4",
+            "joint_5",
+            "joint_6"
+        ]
+
+
         self.fk_pub = self.create_publisher(PoseStamped, 'fk_out', 10)
         self.ik_pub = self.create_publisher(JointState, 'ik_out', 10)
 
-        self.create_subscription(JointState, 'fk_in', self.fk_callback, 10)
+        self.create_subscription(JointState, '/joint_states', self.fk_callback, 10)
         self.create_subscription(PoseStamped, 'ik_in', self.ik_callback, 10)
 
         self.get_logger().info("Robot kinematics node ready.")
@@ -25,8 +36,17 @@ class KinematicsNode(Node):
             self.get_logger().warn("FK input must have 6 joint values.")
             return
 
-        T_06 = forward_kinematics(msg.position)
+        joint_map = dict(zip(msg.name, msg.position))
+        try:
+            ordered_angles = [joint_map[name] for name in self.joint_names]
+        except KeyError as e:
+            self.get_logger().warn(f"Missing joint in FK input: {e}")
+            return
 
+        self.get_logger().info(f"Received FK joint angles (ordered): {np.round(ordered_angles, 4)}")
+
+        T_06 = forward_kinematics(ordered_angles)
+        
         pose = PoseStamped()
         pose.header = Header()
         pose.header.stamp = self.get_clock().now().to_msg()
@@ -45,6 +65,7 @@ class KinematicsNode(Node):
         pose.pose.orientation.w = quat[3]
 
         self.fk_pub.publish(pose)
+
 
     def ik_callback(self, msg: PoseStamped):
         from scipy.spatial.transform import Rotation as R

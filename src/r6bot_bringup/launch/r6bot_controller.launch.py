@@ -41,7 +41,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("r6bot_description"),
                     "urdf",
-                    "r6bot.urdf",
+                    "robot.urdf",
                 ]
             ),
         ]

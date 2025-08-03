@@ -1,4 +1,4 @@
-<ros2_control name="r6bot" type="system">
+<ros2_control name="robot" type="system">
 
       <hardware>
         <plugin>r6bot_hardware/RobotSystem</plugin>

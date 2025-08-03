@@ -54,26 +54,26 @@ Visualization Manager:
       Enabled: true
       Frame Timeout: 15
       Frames:
-        All Enabled: true
+        All Enabled: false
         base_link:
-          Value: true
-        ft_frame:
-          Value: true
+          Value: false
         link_1:
-          Value: true
+          Value: false
         link_2:
-          Value: true
+          Value: false
         link_3:
-          Value: true
+          Value: false
         link_4:
-          Value: true
+          Value: false
         link_5:
-          Value: true
+          Value: false
         link_6:
-          Value: true
-        tool0:
-          Value: true
-        world:
+          Value: false
+        link_7:
+          Value: false
+        tool0_tcp:
+          Value: false
+        tool1_tcp:
           Value: true
       Marker Scale: 1
       Name: TF
@@ -81,17 +81,16 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        world:
-          base_link:
-            link_1:
-              link_2:
-                link_3:
-                  link_4:
-                    link_5:
-                      link_6:
-                        ft_frame:
-                          tool0:
-                            {}
+        base_link:
+          link_1:
+            link_2:
+              link_3:
+                link_4:
+                  link_5:
+                    link_6:
+                      link_7:
+                        tool0_tcp:
+                          tool1_tcp: {}
       Update Interval: 0
       Value: true
     - Alpha: 1

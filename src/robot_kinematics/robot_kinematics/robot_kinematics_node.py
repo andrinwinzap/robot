@@ -11,6 +11,13 @@ from robot_kinematics import forward_kinematics, inverse_kinematics
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp
 
+def choose_min_movement_solution(current_joints, ik_solutions):
+    current = np.array(current_joints)
+    solutions = np.array(ik_solutions)
+    diffs = np.linalg.norm(solutions - current, axis=1)  # Euclidean distance in joint space
+    best_idx = np.argmin(diffs)
+    return ik_solutions[best_idx]
+
 class KinematicsNode(Node):
     def __init__(self):
         super().__init__('robot_kinematics_node')
@@ -76,7 +83,8 @@ class KinematicsNode(Node):
             self.get_logger().warn("No IK solution for target pose.")
             return
 
-        end_joints = ik_solutions[0]
+        end_joints = choose_min_movement_solution(self.current_joint_positions, ik_solutions)
+
 
         total_time = self.get_parameter("total_time").value
         num_points = self.get_parameter("num_waypoints").value

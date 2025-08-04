@@ -41,7 +41,7 @@ def generate_launch_description():
             " ",
             PathJoinSubstitution(
                 [
-                    FindPackageShare("r6bot_description"),
+                    FindPackageShare("robot_description"),
                     "urdf",
                     "robot.urdf",
                 ]
@@ -51,7 +51,7 @@ def generate_launch_description():
     robot_description = {"robot_description": robot_description_content}
 
     rviz_config_file = PathJoinSubstitution(
-        [FindPackageShare("r6bot_description"), "rviz", "view_robot.rviz"]
+        [FindPackageShare("robot_description"), "rviz", "view_robot.rviz"]
     )
 
     joint_state_publisher_node = Node(

@@ -1,7 +1,7 @@
 <ros2_control name="robot" type="system">
 
       <hardware>
-        <plugin>r6bot_hardware/RobotSystem</plugin>
+        <plugin>robot_hardware/RobotSystem</plugin>
       </hardware>
 
       <joint name="joint_1">

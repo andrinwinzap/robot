@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "r6bot_hardware/r6bot_hardware.hpp"
+#include "robot_hardware/robot_hardware.hpp"
 #include <string>
 #include <vector>
 
 #include <iostream>
 
-namespace r6bot_hardware
+namespace robot_hardware
 {
   CallbackReturn RobotSystem::on_init(const hardware_interface::HardwareInfo &info)
   {
@@ -66,9 +66,9 @@ namespace r6bot_hardware
     return return_type::OK;
   }
 
-} // namespace r6bot_hardware
+} // namespace robot_hardware
 
 #include "pluginlib/class_list_macros.hpp"
 
 PLUGINLIB_EXPORT_CLASS(
-    r6bot_hardware::RobotSystem, hardware_interface::SystemInterface)
+    robot_hardware::RobotSystem, hardware_interface::SystemInterface)

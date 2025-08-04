@@ -52,7 +52,7 @@ def replace_meshes_path(urdf_path: str):
     for mesh in root.iter('mesh'):
         filename = mesh.attrib.get('filename')
         if filename and filename.startswith(f'package://{assets_directory}/merged'):
-            new_filename = filename.replace(f'package://{assets_directory}/merged', 'package://r6bot_description/meshes')
+            new_filename = filename.replace(f'package://{assets_directory}/merged', 'package://robot_description/meshes')
             mesh.set('filename', new_filename)
 
     tree.write(urdf_path)

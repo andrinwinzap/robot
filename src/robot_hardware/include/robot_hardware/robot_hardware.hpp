@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef R6BOT_HARDWARE__R6BOT_HARDWARE_HPP_
-#define R6BOT_HARDWARE__R6BOT_HARDWARE_HPP_
+#ifndef robot_HARDWARE__robot_HARDWARE_HPP_
+#define robot_HARDWARE__robot_HARDWARE_HPP_
 
 #include "string"
 #include "unordered_map"
@@ -27,7 +27,7 @@
 
 using hardware_interface::return_type;
 
-namespace r6bot_hardware
+namespace robot_hardware
 {
   using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -45,6 +45,6 @@ namespace r6bot_hardware
   protected:
   };
 
-} // namespace r6bot_hardware
+} // namespace robot_hardware
 
-#endif // R6BOT_HARDWARE__R6BOT_HARDWARE_HPP_
+#endif // robot_HARDWARE__robot_HARDWARE_HPP_

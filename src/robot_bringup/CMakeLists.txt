@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(r6bot_reference_generator)
+project(robot_bringup)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -7,26 +7,9 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(trajectory_msgs REQUIRED)
-find_package(kdl_parser REQUIRED)
-
-add_executable(send_trajectory send_trajectory.cpp)
-
-ament_target_dependencies(send_trajectory
-  rclcpp
-  trajectory_msgs
-  kdl_parser
-)
-
-set_target_properties(send_trajectory PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED ON
-)
-
-install(TARGETS send_trajectory
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
+find_package(robot_state_publisher REQUIRED)
+find_package(controller_manager REQUIRED)
+find_package(joint_state_broadcaster REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -39,5 +22,9 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+install(DIRECTORY launch config
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()

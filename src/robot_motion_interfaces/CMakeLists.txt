@@ -15,8 +15,8 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 set(srv_files
-  "srv/GetCurrentPose.srv"
-  "srv/GetJointConfiguration.srv"  
+  "srv/GetCartesianSpacePose.srv"
+  "srv/GetJointSpacePose.srv"  
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

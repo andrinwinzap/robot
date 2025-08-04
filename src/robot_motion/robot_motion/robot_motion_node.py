@@ -341,20 +341,53 @@ class KinematicsNode(Node):
             point.positions = pos.tolist()
             point.velocities = vel.tolist()
             point.accelerations = acc.tolist()
-            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
+            point.time_from_start.sec = int(total_time * t_norm)
+            point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
             trajectory.points.append(point)
 
+        # Zero velocities and accelerations at the end
+        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
+        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+
+        # Prepare FollowJointTrajectory action client
+        fjt_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
+        if not fjt_client.wait_for_server(timeout_sec=5.0):
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message="FollowJointTrajectory server not available.")
+
+        fjt_goal = FollowJointTrajectory.Goal()
+        fjt_goal.trajectory = trajectory
+
+        # Feedback forwarding callback
+        def feedback_callback(feedback_msg):
+            # Example: forward approximate progress from controller feedback
+            # If the controller's feedback message has actual fields, map them here
             feedback = CartesianSpaceMotion.Feedback()
-            feedback.progress = float(i + 1) / num_points
+            feedback.progress = 0.0  # Default fallback
+            # You can extend this if controller feedback provides meaningful data
             goal_handle.publish_feedback(feedback)
 
-        trajectory.points[-1].velocities = [0.0] * 6
-        trajectory.points[-1].accelerations = [0.0] * 6
+        send_goal_future = fjt_client.send_goal_async(fjt_goal, feedback_callback=feedback_callback)
+        await send_goal_future
+        fjt_goal_handle = send_goal_future.result()
 
-        self.send_trajectory_goal(trajectory)
+        if not fjt_goal_handle.accepted:
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message="Trajectory rejected by controller.")
 
-        goal_handle.succeed()
-        return CartesianSpaceMotion.Result(success=True, message="Trajectory sent to controller.")
+        self.get_logger().info("Trajectory accepted by controller.")
+
+        result_future = fjt_goal_handle.get_result_async()
+        await result_future
+        result = result_future.result().result
+
+        # Forward result from FollowJointTrajectory
+        if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
+            goal_handle.succeed()
+            return CartesianSpaceMotion.Result(success=True, message="Motion completed successfully.")
+        else:
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message=f"Controller failed with error code {result.error_code}")
 
     async def joint_space_motion_callback(self, goal_handle):
         self.get_logger().info("Received Joint goal request.")
@@ -396,21 +429,51 @@ class KinematicsNode(Node):
             point.positions = pos.tolist()
             point.velocities = vel.tolist()
             point.accelerations = acc.tolist()
-            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
+            point.time_from_start.sec = int(total_time * t_norm)
+            point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
             trajectory.points.append(point)
-
-            feedback = JointSpaceMotion.Feedback()
-            feedback.progress = float(i + 1) / num_points
-            goal_handle.publish_feedback(feedback)
 
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
 
-        self.send_trajectory_goal(trajectory)
+        # Forward trajectory to FollowJointTrajectory server
+        fjt_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
+        if not fjt_client.wait_for_server(timeout_sec=5.0):
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message="FollowJointTrajectory server not available.")
 
-        goal_handle.succeed()
-        return JointSpaceMotion.Result(success=True, message="Trajectory sent to controller.")
+        fjt_goal = FollowJointTrajectory.Goal()
+        fjt_goal.trajectory = trajectory
 
+        # Send goal with feedback callback
+        feedback_callback = lambda feedback_msg: goal_handle.publish_feedback(
+            JointSpaceMotion.Feedback(progress=feedback_msg.feedback.partial_joint_trajectory_progress)
+            if hasattr(feedback_msg.feedback, 'partial_joint_trajectory_progress')
+            else JointSpaceMotion.Feedback(progress=0.0)  # fallback
+        )
+
+        send_goal_future = fjt_client.send_goal_async(fjt_goal, feedback_callback=feedback_callback)
+        await send_goal_future
+        fjt_goal_handle = send_goal_future.result()
+
+        if not fjt_goal_handle.accepted:
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message="Trajectory rejected by controller.")
+
+        self.get_logger().info("Trajectory accepted by controller.")
+
+        result_future = fjt_goal_handle.get_result_async()
+        await result_future
+        result = result_future.result().result
+
+        # Forward result from FollowJointTrajectory to JointSpaceMotion
+        if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
+            goal_handle.succeed()
+            return JointSpaceMotion.Result(success=True, message="Motion completed successfully.")
+        else:
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message=f"Controller failed with error code {result.error_code}")
+        
 def main(args=None):
     rclpy.init(args=args)
     node = KinematicsNode()

@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'robot_control'
+package_name = 'robot_motion'
 
 setup(
     name=package_name,
@@ -11,15 +11,16 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'scipy'],
+    install_requires=['setuptools', 'numpy', 'sympy', 'rclpy', 'scipy'],
     zip_safe=True,
-    maintainer='andrin',
+    maintainer='Andrin Winzap',
     maintainer_email='AndrinWinzap@proton.me',
-    description='Python library to control a 6dof robot arm',
+    description='Analytical kinematics for a 6dof robot arm',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'robot_motion_node = robot_motion.robot_motion_node:main',
         ],
     },
 )

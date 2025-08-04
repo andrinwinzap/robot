@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'robot_kinematics'
+package_name = 'robot_sdk'
 
 setup(
     name=package_name,
@@ -11,16 +11,15 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'numpy', 'sympy', 'rclpy', 'scipy'],
+    install_requires=['setuptools', 'scipy'],
     zip_safe=True,
-    maintainer='Andrin Winzap',
+    maintainer='andrin',
     maintainer_email='AndrinWinzap@proton.me',
-    description='Analytical kinematics for a 6dof robot arm',
+    description='Python library to control a 6dof robot arm',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'robot_kinematics_node = robot_kinematics.robot_kinematics_node:main',
         ],
     },
 )

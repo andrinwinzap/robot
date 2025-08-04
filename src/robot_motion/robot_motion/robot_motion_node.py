@@ -8,9 +8,9 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
 
-from robot_kinematics import forward_kinematics, inverse_kinematics
+from robot_motion.robot_motion.robot_motion import forward_kinematics, inverse_kinematics
 
-from robot_kinematics.utills import check_limits
+from robot_motion.utills import check_limits
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp

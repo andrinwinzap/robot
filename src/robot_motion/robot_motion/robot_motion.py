@@ -1,4 +1,4 @@
-# robot_kinematics.py
+# robot_motion.py
 
 import numpy as np
 from .symbolic_kinematics import T_06_func, T_01_func, R_03_func

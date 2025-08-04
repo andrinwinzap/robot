@@ -1,4 +1,4 @@
-# robot_control/robot_control/robot.py
+# robot_sdk/robot_sdk/robot.py
 
 import numpy as np
 import rclpy
@@ -7,23 +7,23 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 
-from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
+from robot_motion_interfaces.srv import GetCurrentPose, GetJointConfiguration
 
 class Robot:
     def __init__(self):
         rclpy.init()
         self.tcp_orientation = [np.pi, 0.0, 0.0]
-        self.node = Node("robot_control_client")
+        self.node = Node("robot_sdk_client")
         self.publisher = self.node.create_publisher(PoseStamped, "/trajectory_goal", 10)
         self.joint_goal_pub = self.node.create_publisher(JointState, '/joint_goal', 10)
 
-        self.pose_client = self.node.create_client(GetCurrentPose, 'robot_kinematics/get_current_pose')
-        self.joint_config_client = self.node.create_client(GetJointConfiguration, 'robot_kinematics/get_joint_configuration')
+        self.pose_client = self.node.create_client(GetCurrentPose, 'robot_motion/get_current_pose')
+        self.joint_config_client = self.node.create_client(GetJointConfiguration, 'robot_motion/get_joint_configuration')
 
         if not self.pose_client.wait_for_service(timeout_sec=5.0):
-            self.node.get_logger().error("Service 'robot_kinematics/get_current_pose' not available.")
+            self.node.get_logger().error("Service 'robot_motion/get_current_pose' not available.")
         if not self.joint_config_client.wait_for_service(timeout_sec=5.0):
-            self.node.get_logger().error("Service 'robot_kinematics/get_joint_configuration' not available.")
+            self.node.get_logger().error("Service 'robot_motion/get_joint_configuration' not available.")
 
     def move(self, position, orientation=None):
         tcp_rot = R.from_euler('xyz', self.tcp_orientation)

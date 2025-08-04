@@ -10,6 +10,8 @@ from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguratio
 
 from robot_kinematics import forward_kinematics, inverse_kinematics
 
+from robot_kinematics.utills import check_limits
+
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp
 
@@ -215,7 +217,12 @@ class KinematicsNode(Node):
             self.get_logger().warn(f"Missing joint in joint_goal input: {e}")
             return
 
-        # Generate trajectory from current_joint_positions to target_positions
+        # Check joint limits using your utility function
+        if not check_limits(target_positions):
+            self.get_logger().warn("Requested joint positions exceed joint limits. Ignoring command.")
+            return
+
+        # Proceed with trajectory generation as before
         total_time = self.get_parameter("total_time").value
         num_points = self.get_parameter("num_waypoints").value
         interpolation = self.get_parameter("interpolation_type").value
@@ -240,7 +247,6 @@ class KinematicsNode(Node):
             point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
             trajectory.points.append(point)
 
-        # zero final velocity & acceleration
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
 

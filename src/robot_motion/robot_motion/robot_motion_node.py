@@ -6,9 +6,9 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
+from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
-from robot_motion.robot_motion.robot_motion import forward_kinematics, inverse_kinematics
+from robot_motion.robot_motion import forward_kinematics, inverse_kinematics
 
 from robot_motion.utills import check_limits
 
@@ -24,19 +24,19 @@ def choose_min_movement_solution(current_joints, ik_solutions):
 
 class KinematicsNode(Node):
     def __init__(self):
-        super().__init__('robot_kinematics_node')
+        super().__init__('robot_motion_node')
 
         self.joint_names = [f"joint_{i+1}" for i in range(6)]
         self.current_joint_positions = None
 
         self.traj_pub = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
-
-        self.create_service(GetCurrentPose, 'robot_kinematics/get_current_pose', self.get_current_pose_callback)
-        self.create_service(GetJointConfiguration, 'robot_kinematics/get_joint_configuration', self.get_joint_configuration_callback)
+        self.create_subscription(JointState, '/joint_states', self.joint_states_callback, 10)
         
-        self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
-        self.create_subscription(PoseStamped, 'trajectory_goal', self.trajectory_callback, 10)
-        self.create_subscription(JointState, '/joint_goal', self.joint_goal_callback, 10)
+        self.create_service(GetCartesianSpacePose, '/robot_motion/cartesian_space/get_pose', self.cartesian_space_pose_getter_callback)
+        self.create_service(GetJointSpacePose, '/robot_motion/joint_space/get_pose', self.joint_space_pose_getter_callback)
+        
+        self.create_subscription(PoseStamped, '/robot_motion/cartesian_space/set_goal_pose', self.cartesian_space_goal_pose_setter_callback, 10)
+        self.create_subscription(JointState, '/robot_motion/joint_space/set_goal_pose', self.joint_space_goal_pose_setter_callback, 10)
 
         self.declare_parameter("interpolation_type", "cubic")
         self.declare_parameter("total_time", 5.0)
@@ -44,7 +44,7 @@ class KinematicsNode(Node):
 
         self.get_logger().info("Robot kinematics node ready.")
 
-    def joint_state_callback(self, msg: JointState):
+    def joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
         try:
             self.current_joint_positions = [joint_map[name] for name in self.joint_names]
@@ -52,7 +52,7 @@ class KinematicsNode(Node):
             self.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
 
-    def trajectory_callback(self, msg: PoseStamped):
+    def cartesian_space_goal_pose_setter_callback(self, msg: PoseStamped):
         if self.current_joint_positions is None:
             self.get_logger().warn("No joint state received yet.")
             return
@@ -182,7 +182,7 @@ class KinematicsNode(Node):
 
         return pos, vel, acc
     
-    def get_current_pose_callback(self, request, response):
+    def cartesian_space_pose_getter_callback(self, request, response):
         if self.current_joint_positions is None:
             self.get_logger().warn("No joint states available to compute pose.")
             empty_pose = PoseStamped()
@@ -195,7 +195,7 @@ class KinematicsNode(Node):
             response.pose = pose_stamped  # Assign full PoseStamped, not just Pose
         return response
     
-    def get_joint_configuration_callback(self, request, response):
+    def joint_space_pose_getter_callback(self, request, response):
         if self.current_joint_positions is None:
             self.get_logger().warn("No joint state available to respond.")
             response.joint_names = []
@@ -205,7 +205,7 @@ class KinematicsNode(Node):
             response.joint_positions = self.current_joint_positions
         return response
 
-    def joint_goal_callback(self, msg: JointState):
+    def joint_space_goal_pose_setter_callback(self, msg: JointState):
         if self.current_joint_positions is None:
             self.get_logger().warn("No joint state received yet to plan from.")
             return

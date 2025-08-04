@@ -1,7 +1,6 @@
 build
 install
 log
-realtime_tools
 .venv
 .assets
 .urdf

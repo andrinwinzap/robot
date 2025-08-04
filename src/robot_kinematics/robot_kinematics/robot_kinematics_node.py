@@ -54,8 +54,8 @@ class KinematicsNode(Node):
     def ik_callback(self, msg: PoseStamped):
         T = self.pose_to_transform(msg.pose)
         solutions = inverse_kinematics(T)
-        if not solutions:
-            self.get_logger().warn("No IK solutions found.")
+        if T is None:
+            self.get_logger().warn("Invalid pose received. Skipping IK computation.")
             return
 
         for sol in solutions:
@@ -75,6 +75,9 @@ class KinematicsNode(Node):
         start_ori = R.from_matrix(start_T[:3, :3])
 
         end_T = self.pose_to_transform(msg.pose)
+        if end_T is None:
+            self.get_logger().warn("Invalid target pose received. Skipping trajectory generation.")
+            return
         end_pos = end_T[:3, 3]
         end_ori = R.from_matrix(end_T[:3, :3])
 
@@ -127,7 +130,12 @@ class KinematicsNode(Node):
         self.get_logger().info(f"Published trajectory with {num_points} points.")
 
     def pose_to_transform(self, pose):
-        r = R.from_quat([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
+        quat = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+        if np.isclose(np.linalg.norm(quat), 0.0):
+            self.get_logger().warn("Received pose with zero-norm quaternion. Ignoring pose.")
+            return None
+
+        r = R.from_quat(quat)
         T = np.eye(4)
         T[:3, :3] = r.as_matrix()
         T[:3, 3] = [pose.position.x, pose.position.y, pose.position.z]

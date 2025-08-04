@@ -29,7 +29,7 @@ class KinematicsNode(Node):
         self.joint_names = [f"joint_{i+1}" for i in range(6)]
         self.current_joint_positions = None
 
-        self.traj_pub = self.create_publisher(JointTrajectory, '/r6bot_controller/joint_trajectory', 10)
+        self.traj_pub = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
 
         self.create_service(GetCurrentPose, 'robot_kinematics/get_current_pose', self.get_current_pose_callback)
         self.create_service(GetJointConfiguration, 'robot_kinematics/get_joint_configuration', self.get_joint_configuration_callback)

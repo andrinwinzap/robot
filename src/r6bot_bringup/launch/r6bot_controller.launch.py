@@ -48,13 +48,10 @@ def generate_launch_description():
     )
     robot_description = {"robot_description": robot_description_content}
 
-    robot_controllers = PathJoinSubstitution(
-        [
-            FindPackageShare("r6bot_bringup"),
-            "config",
-            "r6bot_controller.yaml",
-        ]
-    )
+    controller_manager_config = PathJoinSubstitution([
+        FindPackageShare("r6bot_bringup"), "config", "robot_controllers.yaml"
+    ])
+
     rviz_config_file = PathJoinSubstitution(
         [FindPackageShare("r6bot_description"), "rviz", "view_robot.rviz"]
     )
@@ -62,9 +59,10 @@ def generate_launch_description():
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[robot_controllers],
+        parameters=[controller_manager_config],
         output="both",
     )
+
     robot_state_pub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -88,11 +86,12 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster"],
     )
 
-    robot_controller_spawner = Node(
+    joint_trajectory_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["r6bot_controller", "--param-file", robot_controllers],
+        arguments=["joint_trajectory_controller"],
     )
+
 
     # Delay rviz start after `joint_state_broadcaster`
     delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
@@ -104,19 +103,20 @@ def generate_launch_description():
 
     # Delay start of joint_state_broadcaster after `robot_controller`
     # TODO(anyone): This is a workaround for flaky tests. Remove when fixed.
-    delay_joint_state_broadcaster_after_robot_controller_spawner = RegisterEventHandler(
+    delay_joint_state_broadcaster_after_controller_spawner = RegisterEventHandler(
         event_handler=OnProcessExit(
-            target_action=robot_controller_spawner,
+            target_action=joint_trajectory_controller_spawner,
             on_exit=[joint_state_broadcaster_spawner],
         )
     )
 
+
     nodes = [
         control_node,
         robot_state_pub_node,
-        robot_controller_spawner,
+        joint_trajectory_controller_spawner,
         delay_rviz_after_joint_state_broadcaster_spawner,
-        delay_joint_state_broadcaster_after_robot_controller_spawner,
+        delay_joint_state_broadcaster_after_controller_spawner,
     ]
 
     return LaunchDescription(declared_arguments + nodes)

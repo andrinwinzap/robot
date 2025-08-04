@@ -54,10 +54,9 @@ namespace r6bot_hardware
 
     for (std::size_t i = 0; i < info_.joints.size(); i++)
     {
-      const auto name_vel = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
       const auto name_pos = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
-      set_state(name_vel, get_command(name_vel));
-      set_state(name_pos, get_state(name_pos) + get_state(name_vel) * period.seconds());
+      // Just reflect the command position as the state position
+      set_state(name_pos, get_command(name_pos));
     }
     return return_type::OK;
   }

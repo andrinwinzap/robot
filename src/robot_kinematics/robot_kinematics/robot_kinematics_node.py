@@ -6,6 +6,8 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
+from robot_kinematics_interfaces.srv import GetCurrentPose
+
 from robot_kinematics import forward_kinematics, inverse_kinematics
 
 import numpy as np
@@ -25,8 +27,9 @@ class KinematicsNode(Node):
         self.joint_names = [f"joint_{i+1}" for i in range(6)]
         self.current_joint_positions = None
 
-        self.fk_pub = self.create_publisher(PoseStamped, 'fk_out', 10)
         self.traj_pub = self.create_publisher(JointTrajectory, '/r6bot_controller/joint_trajectory', 10)
+
+        self.create_service(GetCurrentPose, 'robot_kinematics/get_current_pose', self.get_current_pose_callback)
 
         self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
         self.create_subscription(PoseStamped, 'trajectory_goal', self.trajectory_callback, 10)
@@ -44,10 +47,6 @@ class KinematicsNode(Node):
         except KeyError as e:
             self.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
-
-        T = forward_kinematics(self.current_joint_positions)
-        pose = self.transform_to_pose(T)
-        self.fk_pub.publish(pose)
 
     def trajectory_callback(self, msg: PoseStamped):
         if self.current_joint_positions is None:
@@ -178,6 +177,20 @@ class KinematicsNode(Node):
             acc = np.zeros_like(q0)
 
         return pos, vel, acc
+    
+    def get_current_pose_callback(self, request, response):
+        if self.current_joint_positions is None:
+            self.get_logger().warn("No joint states available to compute pose.")
+            empty_pose = PoseStamped()
+            empty_pose.header.stamp = self.get_clock().now().to_msg()
+            empty_pose.header.frame_id = "base_link"
+            response.pose = empty_pose
+        else:
+            T = forward_kinematics(self.current_joint_positions)
+            pose_stamped = self.transform_to_pose(T)  # this returns a PoseStamped
+            response.pose = pose_stamped  # Assign full PoseStamped, not just Pose
+        return response
+
 
 def main(args=None):
     rclpy.init(args=args)

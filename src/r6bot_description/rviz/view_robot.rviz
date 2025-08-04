@@ -10,7 +10,7 @@ Panels:
         - /TF1/Frames1
         - /RobotModel1
       Splitter Ratio: 0.5
-    Tree Height: 631
+    Tree Height: 279
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -33,10 +33,10 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 1
+      Cell Size: 0.05000000074505806
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: false
+      Enabled: true
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -47,16 +47,18 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 10
+      Plane Cell Count: 25
       Reference Frame: <Fixed Frame>
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
       Frame Timeout: 15
       Frames:
         All Enabled: false
         base_link:
-          Value: false
+          Value: true
         link_1:
           Value: false
         link_2:
@@ -74,8 +76,8 @@ Visualization Manager:
         tool0_tcp:
           Value: false
         tool1_tcp:
-          Value: true
-      Marker Scale: 1
+          Value: false
+      Marker Scale: 0.5
       Name: TF
       Show Arrows: false
       Show Axes: true
@@ -90,7 +92,9 @@ Visualization Manager:
                     link_6:
                       link_7:
                         tool0_tcp:
-                          tool1_tcp: {}
+                          {}
+                        tool1_tcp:
+                          {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -115,11 +119,6 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-          Value: true
-        ft_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
         link_1:
           Alpha: 1
           Show Axes: false
@@ -150,11 +149,16 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        tool0:
+        link_7:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-        world:
+          Value: true
+        tool0_tcp:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        tool1_tcp:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -168,7 +172,7 @@ Visualization Manager:
       Visual Enabled: true
   Enabled: true
   Global Options:
-    Background Color: 255; 255; 255
+    Background Color: 25; 25; 25
     Fixed Frame: base_link
     Frame Rate: 30
   Name: root
@@ -212,33 +216,33 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.020890235900879
+      Distance: 2.1442465782165527
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.3431778848171234
-        Y: 0.6169372200965881
-        Z: 0.4080313444137573
+        X: -0.1659529209136963
+        Y: 0.020221438258886337
+        Z: 0.22043687105178833
       Focal Shape Fixed Size: true
-      Focal Shape Size: 0.05000000074505806
+      Focal Shape Size: 0.0010000000474974513
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.17479799687862396
+      Pitch: 0.5147963762283325
       Target Frame: <Fixed Frame>
-      Value: Orbit (rviz)
-      Yaw: 0.8921666145324707
+      Value: Orbit (rviz_default_plugins)
+      Yaw: 0.227374866604805
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1016
+  Height: 2282
   Hide Left Dock: false
-  Hide Right Dock: true
-  QMainWindow State: 000000ff00000000fd0000000400000000000001bb0000033efc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d0000033e000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000015f0000053efc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000006e0000053e000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007360000005afc0100000002fb0000000800540069006d0065010000000000000736000002fb00fffffffb0000000800540069006d00650100000000000004500000000000000000000005750000033e00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000001bb00000839fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000009900fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed00000d2000000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c0061007900730000000023000008390000014f00fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c0000026100000001000002860000089dfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a0056006900650077007300000000230000089d0000010b00fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000e950000005afc0100000002fb0000000800540069006d0065000000000000000e95000003fa00fffffffb0000000800540069006d0065010000000000000450000000000000000000000e950000089d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730000000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -246,7 +250,7 @@ Window Geometry:
   Tool Properties:
     collapsed: false
   Views:
-    collapsed: true
-  Width: 1846
-  X: 74
-  Y: 27
+    collapsed: false
+  Width: 3733
+  X: 0
+  Y: 1026

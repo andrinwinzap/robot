@@ -9,19 +9,24 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
-
-find_package(ament_cmake REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 set(srv_files
   "srv/GetCartesianSpacePose.srv"
   "srv/GetJointSpacePose.srv"  
 )
 
+set(action_files
+  "action/CartesianSpaceMotion.action"
+  "action/JointSpaceMotion.action"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${srv_files}
-  DEPENDENCIES geometry_msgs
+  ${action_files}
+  DEPENDENCIES geometry_msgs sensor_msgs trajectory_msgs
 )
 
 if(BUILD_TESTING)

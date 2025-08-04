@@ -6,6 +6,8 @@ from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
+from rclpy.action import ActionClient
+from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
 class Robot:
@@ -16,7 +18,7 @@ class Robot:
 
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
-        
+
     def shutdown(self):
         self.node.destroy_node()
         rclpy.shutdown()
@@ -25,18 +27,35 @@ class Robot:
         def __init__(self, robot_instance):
             self.robot = robot_instance
 
-            self.pose_setter_publisher = self.robot.node.create_publisher(JointState, '/robot_motion/joint_space/set_goal_pose', 10)
+            self.pose_setter_client = ActionClient(
+                self.robot.node,
+                JointSpaceMotion,
+                '/robot_motion/joint_space/motion')
+
             self.pose_getter_client = self.robot.node.create_client(GetJointSpacePose, '/robot_motion/joint_space/get_pose')
             if not self.pose_getter_client.wait_for_service(timeout_sec=5.0):
                 self.robot.node.get_logger().error("Service '/robot_motion/joint_space/get_pose' not available.")
-                
+
         def move(self, joint_positions):
-            msg = JointState()
-            msg.header.stamp = self.robot.node.get_clock().now().to_msg()
-            msg.name = [f"joint_{i+1}" for i in range(len(joint_positions))]
-            msg.position = joint_positions
-            self.pose_setter_publisher.publish(msg)
-            self.robot.node.get_logger().info(f"Published joint_goal with positions: {joint_positions}")
+            goal_msg = JointSpaceMotion.Goal()
+            goal_msg.joint_state = JointState()
+            goal_msg.joint_state.header.stamp = self.robot.node.get_clock().now().to_msg()
+            goal_msg.joint_state.name = [f"joint_{i+1}" for i in range(len(joint_positions))]
+            goal_msg.joint_state.position = joint_positions
+
+            self.pose_setter_client.wait_for_server()
+            goal_future = self.pose_setter_client.send_goal_async(goal_msg)
+            rclpy.spin_until_future_complete(self.robot.node, goal_future)
+            goal_handle = goal_future.result()
+            if not goal_handle.accepted:
+                self.robot.node.get_logger().error("Goal rejected by the action server.")
+                return
+
+            result_future = goal_handle.get_result_async()
+            rclpy.spin_until_future_complete(self.robot.node, result_future)
+            result = result_future.result().result
+
+            self.robot.node.get_logger().info(f"Action result: success={result.success}, message='{result.message}'")
 
         def get_pose(self):
             request = GetJointSpacePose.Request()
@@ -48,13 +67,17 @@ class Robot:
             else:
                 self.robot.node.get_logger().error("Failed to call service get_joint_configuration")
                 return {}
-            
+
     class CartesianSpace:
 
         def __init__(self, robot_instance):
             self.robot = robot_instance
 
-            self.pose_setter_publisher = self.robot.node.create_publisher(PoseStamped, "/robot_motion/cartesian_space/set_goal_pose", 10)
+            self.pose_setter_client = ActionClient(
+                self.robot.node,
+                CartesianSpaceMotion,
+                '/robot_motion/cartesian_space/motion')
+
             self.pose_getter_client = self.robot.node.create_client(GetCartesianSpacePose, '/robot_motion/cartesian_space/get_pose')
             if not self.pose_getter_client.wait_for_service(timeout_sec=5.0):
                 self.robot.node.get_logger().error("Service '/robot_motion/cartesian_space/get_pose' not available.")
@@ -81,8 +104,22 @@ class Robot:
             pose_msg.pose.orientation.z = quat[2]
             pose_msg.pose.orientation.w = quat[3]
 
-            self.pose_setter_publisher.publish(pose_msg)
-            self.robot.node.get_logger().info("Sent desired pose")
+            goal_msg = CartesianSpaceMotion.Goal()
+            goal_msg.pose = pose_msg
+
+            self.pose_setter_client.wait_for_server()
+            goal_future = self.pose_setter_client.send_goal_async(goal_msg)
+            rclpy.spin_until_future_complete(self.robot.node, goal_future)
+            goal_handle = goal_future.result()
+            if not goal_handle.accepted:
+                self.robot.node.get_logger().error("Goal rejected by the action server.")
+                return
+
+            result_future = goal_handle.get_result_async()
+            rclpy.spin_until_future_complete(self.robot.node, result_future)
+            result = result_future.result().result
+
+            self.robot.node.get_logger().info(f"Action result: success={result.success}, message='{result.message}'")
 
         def get_pose(self):
             request = GetCartesianSpacePose.Request()
@@ -91,7 +128,6 @@ class Robot:
             rclpy.spin_until_future_complete(self.robot.node, future)
             response = future.result()
             if response is not None:
-                # response should have a 'pose' attribute of type PoseStamped
                 pos = response.pose.pose.position
                 position = [pos.x, pos.y, pos.z]
 

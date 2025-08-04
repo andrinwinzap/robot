@@ -6,7 +6,8 @@ from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration as BuiltinDuration
 from rclpy.task import Future
-
+from rclpy.action import ActionServer
+from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -40,8 +41,19 @@ class KinematicsNode(Node):
         self.create_service(GetCartesianSpacePose, '/robot_motion/cartesian_space/get_pose', self.cartesian_space_pose_getter_callback)
         self.create_service(GetJointSpacePose, '/robot_motion/joint_space/get_pose', self.joint_space_pose_getter_callback)
         
-        self.create_subscription(PoseStamped, '/robot_motion/cartesian_space/set_goal_pose', self.cartesian_space_goal_pose_setter_callback, 10)
-        self.create_subscription(JointState, '/robot_motion/joint_space/set_goal_pose', self.joint_space_goal_pose_setter_callback, 10)
+        self.cartesian_space_motion_server = ActionServer(
+            self,
+            CartesianSpaceMotion,
+            '/robot_motion/cartesian_space/motion',
+            self.cartesian_space_motion_callback
+        )
+
+        self.joint_space_motion_server = ActionServer(
+            self,
+            JointSpaceMotion,
+            '/robot_motion/joint_space/motion',
+            self.joint_space_motion_callback
+        )
 
         self.declare_parameter("interpolation_type", "cubic")
         self.declare_parameter("total_time", 5.0)
@@ -287,6 +299,117 @@ class KinematicsNode(Node):
             get_result_future.add_done_callback(result_callback)
 
         send_goal_future.add_done_callback(goal_response_callback)
+
+    async def cartesian_space_motion_callback(self, goal_handle):
+        self.get_logger().info("Received Cartesian goal request.")
+        goal = goal_handle.request
+
+        if self.current_joint_positions is None:
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message="No joint state received yet.")
+
+        end_T = self.pose_to_transform(goal.pose.pose)
+        if end_T is None:
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message="Invalid target pose.")
+
+        ik_solutions = inverse_kinematics(end_T)
+        if not ik_solutions:
+            goal_handle.abort()
+            return CartesianSpaceMotion.Result(success=False, message="No IK solution found.")
+
+        end_joints = choose_min_movement_solution(self.current_joint_positions, ik_solutions)
+
+        total_time = self.get_parameter("total_time").value
+        num_points = self.get_parameter("num_waypoints").value
+        interpolation = self.get_parameter("interpolation_type").value
+
+        trajectory = JointTrajectory()
+        trajectory.header.stamp = self.get_clock().now().to_msg()
+        trajectory.joint_names = self.joint_names
+
+        for i in range(num_points):
+            t_norm = i / (num_points - 1)
+            pos, vel, acc = self.interpolate_joint_trajectory(
+                np.array(self.current_joint_positions),
+                np.array(end_joints),
+                t_norm,
+                total_time,
+                interpolation
+            )
+            point = JointTrajectoryPoint()
+            point.positions = pos.tolist()
+            point.velocities = vel.tolist()
+            point.accelerations = acc.tolist()
+            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
+            trajectory.points.append(point)
+
+            feedback = CartesianSpaceMotion.Feedback()
+            feedback.progress = float(i + 1) / num_points
+            goal_handle.publish_feedback(feedback)
+
+        trajectory.points[-1].velocities = [0.0] * 6
+        trajectory.points[-1].accelerations = [0.0] * 6
+
+        self.send_trajectory_goal(trajectory)
+
+        goal_handle.succeed()
+        return CartesianSpaceMotion.Result(success=True, message="Trajectory sent to controller.")
+
+    async def joint_space_motion_callback(self, goal_handle):
+        self.get_logger().info("Received Joint goal request.")
+        goal = goal_handle.request
+
+        if self.current_joint_positions is None:
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message="No joint state received yet.")
+
+        joint_map = dict(zip(goal.joint_state.name, goal.joint_state.position))
+        try:
+            target_positions = [joint_map[name] for name in self.joint_names]
+        except KeyError as e:
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message=f"Missing joint: {e}")
+
+        if not check_limits(target_positions):
+            goal_handle.abort()
+            return JointSpaceMotion.Result(success=False, message="Joint limits exceeded.")
+
+        total_time = self.get_parameter("total_time").value
+        num_points = self.get_parameter("num_waypoints").value
+        interpolation = self.get_parameter("interpolation_type").value
+
+        trajectory = JointTrajectory()
+        trajectory.header.stamp = self.get_clock().now().to_msg()
+        trajectory.joint_names = self.joint_names
+
+        for i in range(num_points):
+            t_norm = i / (num_points - 1)
+            pos, vel, acc = self.interpolate_joint_trajectory(
+                np.array(self.current_joint_positions),
+                np.array(target_positions),
+                t_norm,
+                total_time,
+                interpolation
+            )
+            point = JointTrajectoryPoint()
+            point.positions = pos.tolist()
+            point.velocities = vel.tolist()
+            point.accelerations = acc.tolist()
+            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
+            trajectory.points.append(point)
+
+            feedback = JointSpaceMotion.Feedback()
+            feedback.progress = float(i + 1) / num_points
+            goal_handle.publish_feedback(feedback)
+
+        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
+        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+
+        self.send_trajectory_goal(trajectory)
+
+        goal_handle.succeed()
+        return JointSpaceMotion.Result(success=True, message="Trajectory sent to controller.")
 
 def main(args=None):
     rclpy.init(args=args)

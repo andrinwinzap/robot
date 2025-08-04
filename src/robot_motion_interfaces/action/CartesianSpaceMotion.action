@@ -1,6 +1,14 @@
+# Goal
 geometry_msgs/PoseStamped pose
+
 ---
+# Result
 bool success
 string message
+
 ---
-float32 progress
+# Feedback
+float64[] desired_positions
+float64[] desired_velocities
+float64[] actual_positions
+float64[] actual_velocities

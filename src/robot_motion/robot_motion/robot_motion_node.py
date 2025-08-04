@@ -1,6 +1,11 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Duration
+from rclpy.action import ActionClient
+from control_msgs.action import FollowJointTrajectory
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from builtin_interfaces.msg import Duration as BuiltinDuration
+from rclpy.task import Future
 
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
@@ -29,7 +34,7 @@ class KinematicsNode(Node):
         self.joint_names = [f"joint_{i+1}" for i in range(6)]
         self.current_joint_positions = None
 
-        self.traj_pub = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
+        self.trajectory_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
         self.create_subscription(JointState, '/joint_states', self.joint_states_callback, 10)
         
         self.create_service(GetCartesianSpacePose, '/robot_motion/cartesian_space/get_pose', self.cartesian_space_pose_getter_callback)
@@ -42,6 +47,7 @@ class KinematicsNode(Node):
         self.declare_parameter("total_time", 5.0)
         self.declare_parameter("num_waypoints", 50)
 
+        self.trajectory_client.wait_for_server()
         self.get_logger().info("Robot kinematics node ready.")
 
     def joint_states_callback(self, msg: JointState):
@@ -113,7 +119,7 @@ class KinematicsNode(Node):
         trajectory.points[-1].velocities = [0.0] * 6
         trajectory.points[-1].accelerations = [0.0] * 6
 
-        self.traj_pub.publish(trajectory)
+        self.send_trajectory_goal(trajectory)
         self.get_logger().info(f"Published trajectory with {num_points} points.")
 
     def pose_to_transform(self, pose):
@@ -250,8 +256,37 @@ class KinematicsNode(Node):
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
 
-        self.traj_pub.publish(trajectory)
+        self.send_trajectory_goal(trajectory)
         self.get_logger().info(f"Published trajectory to joint goal with {num_points} points.")
+
+    def send_trajectory_goal(self, trajectory: JointTrajectory):
+        if not self.trajectory_client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().error("FollowJointTrajectory action server not available.")
+            return
+
+        goal_msg = FollowJointTrajectory.Goal()
+        goal_msg.trajectory = trajectory
+        goal_msg.goal_time_tolerance = BuiltinDuration(sec=1)  # Optional
+
+        self.get_logger().info("Sending trajectory goal to FollowJointTrajectory action server...")
+
+        send_goal_future = self.trajectory_client.send_goal_async(goal_msg)
+
+        def goal_response_callback(future: Future):
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().warn("Trajectory goal was rejected.")
+                return
+
+            self.get_logger().info("Trajectory goal accepted.")
+            get_result_future = goal_handle.get_result_async()
+
+            def result_callback(future: Future):
+                result = future.result().result
+                self.get_logger().info(f"Trajectory execution finished with status: {result.error_code}")
+            get_result_future.add_done_callback(result_callback)
+
+        send_goal_future.add_done_callback(goal_response_callback)
 
 def main(args=None):
     rclpy.init(args=args)

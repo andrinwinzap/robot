@@ -26,11 +26,9 @@ class KinematicsNode(Node):
         self.current_joint_positions = None
 
         self.fk_pub = self.create_publisher(PoseStamped, 'fk_out', 10)
-        self.ik_pub = self.create_publisher(JointState, 'ik_out', 10)
         self.traj_pub = self.create_publisher(JointTrajectory, '/r6bot_controller/joint_trajectory', 10)
 
-        self.create_subscription(JointState, '/joint_states', self.fk_callback, 10)
-        self.create_subscription(PoseStamped, 'ik_in', self.ik_callback, 10)
+        self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
         self.create_subscription(PoseStamped, 'trajectory_goal', self.trajectory_callback, 10)
 
         self.declare_parameter("interpolation_type", "cubic")
@@ -39,31 +37,17 @@ class KinematicsNode(Node):
 
         self.get_logger().info("Robot kinematics node ready.")
 
-    def fk_callback(self, msg: JointState):
+    def joint_state_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
         try:
             self.current_joint_positions = [joint_map[name] for name in self.joint_names]
         except KeyError as e:
-            self.get_logger().warn(f"Missing joint in FK input: {e}")
+            self.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
 
         T = forward_kinematics(self.current_joint_positions)
         pose = self.transform_to_pose(T)
         self.fk_pub.publish(pose)
-
-    def ik_callback(self, msg: PoseStamped):
-        T = self.pose_to_transform(msg.pose)
-        solutions = inverse_kinematics(T)
-        if T is None:
-            self.get_logger().warn("Invalid pose received. Skipping IK computation.")
-            return
-
-        for sol in solutions:
-            js = JointState()
-            js.header.stamp = self.get_clock().now().to_msg()
-            js.name = self.joint_names
-            js.position = sol
-            self.ik_pub.publish(js)
 
     def trajectory_callback(self, msg: PoseStamped):
         if self.current_joint_positions is None:

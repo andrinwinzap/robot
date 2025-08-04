@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 
-from robot_kinematics_interfaces.srv import GetCurrentPose
+from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
 
 class Robot:
     def __init__(self):
@@ -15,9 +15,13 @@ class Robot:
         self.node = Node("robot_control_client")
         self.publisher = self.node.create_publisher(PoseStamped, "/trajectory_goal", 10)
 
-        self.client = self.node.create_client(GetCurrentPose, 'robot_kinematics/get_current_pose')
-        if not self.client.wait_for_service(timeout_sec=5.0):
+        self.pose_client = self.node.create_client(GetCurrentPose, 'robot_kinematics/get_current_pose')
+        self.joint_config_client = self.node.create_client(GetJointConfiguration, 'robot_kinematics/get_joint_configuration')
+
+        if not self.pose_client.wait_for_service(timeout_sec=5.0):
             self.node.get_logger().error("Service 'robot_kinematics/get_current_pose' not available.")
+        if not self.joint_config_client.wait_for_service(timeout_sec=5.0):
+            self.node.get_logger().error("Service 'robot_kinematics/get_joint_configuration' not available.")
 
     def move(self, position, orientation=None):
         tcp_rot = R.from_euler('xyz', self.tcp_orientation)
@@ -46,7 +50,7 @@ class Robot:
 
     def get_current_pose(self):
         request = GetCurrentPose.Request()
-        future = self.client.call_async(request)
+        future = self.pose_client.call_async(request)
 
         rclpy.spin_until_future_complete(self.node, future)
         response = future.result()
@@ -72,6 +76,17 @@ class Robot:
         else:
             self.node.get_logger().error("Failed to call service get_current_pose")
             return None, None
+
+    def get_joint_configuration(self):
+        request = GetJointConfiguration.Request()
+        future = self.joint_config_client.call_async(request)
+        rclpy.spin_until_future_complete(self.node, future)
+        response = future.result()
+        if response is not None:
+            return dict(zip(response.joint_names, response.joint_positions))
+        else:
+            self.node.get_logger().error("Failed to call service get_joint_configuration")
+            return {}
 
     def shutdown(self):
         self.node.destroy_node()

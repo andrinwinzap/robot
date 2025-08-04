@@ -6,7 +6,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-from robot_kinematics_interfaces.srv import GetCurrentPose
+from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
 
 from robot_kinematics import forward_kinematics, inverse_kinematics
 
@@ -30,7 +30,8 @@ class KinematicsNode(Node):
         self.traj_pub = self.create_publisher(JointTrajectory, '/r6bot_controller/joint_trajectory', 10)
 
         self.create_service(GetCurrentPose, 'robot_kinematics/get_current_pose', self.get_current_pose_callback)
-
+        self.create_service(GetJointConfiguration, 'robot_kinematics/get_joint_configuration', self.get_joint_configuration_callback)
+        
         self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
         self.create_subscription(PoseStamped, 'trajectory_goal', self.trajectory_callback, 10)
 
@@ -190,7 +191,16 @@ class KinematicsNode(Node):
             pose_stamped = self.transform_to_pose(T)  # this returns a PoseStamped
             response.pose = pose_stamped  # Assign full PoseStamped, not just Pose
         return response
-
+    
+    def get_joint_configuration_callback(self, request, response):
+        if self.current_joint_positions is None:
+            self.get_logger().warn("No joint state available to respond.")
+            response.joint_names = []
+            response.joint_positions = []
+        else:
+            response.joint_names = self.joint_names
+            response.joint_positions = self.current_joint_positions
+        return response
 
 def main(args=None):
     rclpy.init(args=args)

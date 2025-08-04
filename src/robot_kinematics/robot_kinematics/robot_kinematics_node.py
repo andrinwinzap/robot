@@ -34,6 +34,7 @@ class KinematicsNode(Node):
         
         self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
         self.create_subscription(PoseStamped, 'trajectory_goal', self.trajectory_callback, 10)
+        self.create_subscription(JointState, '/joint_goal', self.joint_goal_callback, 10)
 
         self.declare_parameter("interpolation_type", "cubic")
         self.declare_parameter("total_time", 5.0)
@@ -201,6 +202,50 @@ class KinematicsNode(Node):
             response.joint_names = self.joint_names
             response.joint_positions = self.current_joint_positions
         return response
+
+    def joint_goal_callback(self, msg: JointState):
+        if self.current_joint_positions is None:
+            self.get_logger().warn("No joint state received yet to plan from.")
+            return
+
+        joint_map = dict(zip(msg.name, msg.position))
+        try:
+            target_positions = [joint_map[name] for name in self.joint_names]
+        except KeyError as e:
+            self.get_logger().warn(f"Missing joint in joint_goal input: {e}")
+            return
+
+        # Generate trajectory from current_joint_positions to target_positions
+        total_time = self.get_parameter("total_time").value
+        num_points = self.get_parameter("num_waypoints").value
+        interpolation = self.get_parameter("interpolation_type").value
+
+        trajectory = JointTrajectory()
+        trajectory.header.stamp = self.get_clock().now().to_msg()
+        trajectory.joint_names = self.joint_names
+
+        for i in range(num_points):
+            t_norm = i / (num_points - 1)
+            pos, vel, acc = self.interpolate_joint_trajectory(
+                np.array(self.current_joint_positions),
+                np.array(target_positions),
+                t_norm,
+                total_time,
+                interpolation
+            )
+            point = JointTrajectoryPoint()
+            point.positions = pos.tolist()
+            point.velocities = vel.tolist()
+            point.accelerations = acc.tolist()
+            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
+            trajectory.points.append(point)
+
+        # zero final velocity & acceleration
+        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
+        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+
+        self.traj_pub.publish(trajectory)
+        self.get_logger().info(f"Published trajectory to joint goal with {num_points} points.")
 
 def main(args=None):
     rclpy.init(args=args)

@@ -5,6 +5,7 @@ import rclpy
 from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState
 
 from robot_kinematics_interfaces.srv import GetCurrentPose, GetJointConfiguration
 
@@ -14,6 +15,7 @@ class Robot:
         self.tcp_orientation = [np.pi, 0.0, 0.0]
         self.node = Node("robot_control_client")
         self.publisher = self.node.create_publisher(PoseStamped, "/trajectory_goal", 10)
+        self.joint_goal_pub = self.node.create_publisher(JointState, '/joint_goal', 10)
 
         self.pose_client = self.node.create_client(GetCurrentPose, 'robot_kinematics/get_current_pose')
         self.joint_config_client = self.node.create_client(GetJointConfiguration, 'robot_kinematics/get_joint_configuration')
@@ -87,6 +89,14 @@ class Robot:
         else:
             self.node.get_logger().error("Failed to call service get_joint_configuration")
             return {}
+        
+    def move_joint_space(self, joint_positions):
+        msg = JointState()
+        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.name = [f"joint_{i+1}" for i in range(len(joint_positions))]
+        msg.position = joint_positions
+        self.joint_goal_pub.publish(msg)
+        self.node.get_logger().info(f"Published joint_goal with positions: {joint_positions}")
 
     def shutdown(self):
         self.node.destroy_node()

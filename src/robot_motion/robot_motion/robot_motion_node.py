@@ -70,70 +70,6 @@ class KinematicsNode(Node):
             self.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
 
-    def cartesian_space_goal_pose_setter_callback(self, msg: PoseStamped):
-        if self.current_joint_positions is None:
-            self.get_logger().warn("No joint state received yet.")
-            return
-
-        start_T = forward_kinematics(self.current_joint_positions)
-        start_pos = start_T[:3, 3]
-        start_ori = R.from_matrix(start_T[:3, :3])
-
-        end_T = self.pose_to_transform(msg.pose)
-        if end_T is None:
-            self.get_logger().warn("Invalid target pose received. Skipping trajectory generation.")
-            return
-        end_pos = end_T[:3, 3]
-        end_ori = R.from_matrix(end_T[:3, :3])
-
-        ik_solutions = inverse_kinematics(end_T)
-        if not ik_solutions:
-            self.get_logger().warn("No IK solution for target pose.")
-            return
-
-        end_joints = choose_min_movement_solution(self.current_joint_positions, ik_solutions)
-
-
-        total_time = self.get_parameter("total_time").value
-        num_points = self.get_parameter("num_waypoints").value
-        interpolation = self.get_parameter("interpolation_type").value
-
-        trajectory = JointTrajectory()
-        trajectory.header.stamp = self.get_clock().now().to_msg()
-        trajectory.joint_names = self.joint_names
-
-        # Setup slerp for orientation interpolation
-        key_times = [0, 1]
-        key_rots = R.from_quat([start_ori.as_quat(), end_ori.as_quat()])
-        slerp = Slerp(key_times, key_rots)
-
-        for i in range(num_points):
-            t_norm = i / (num_points - 1)
-
-            # Interpolate joint positions with the existing interpolation method
-            pos, vel, acc = self.interpolate_joint_trajectory(
-                np.array(self.current_joint_positions),
-                np.array(end_joints),
-                t_norm,
-                total_time,
-                interpolation
-            )
-
-            point = JointTrajectoryPoint()
-            point.positions = pos.tolist()
-            point.velocities = vel.tolist()
-            point.accelerations = acc.tolist()
-            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
-
-            trajectory.points.append(point)
-
-        # zero final velocity & acceleration
-        trajectory.points[-1].velocities = [0.0] * 6
-        trajectory.points[-1].accelerations = [0.0] * 6
-
-        self.send_trajectory_goal(trajectory)
-        self.get_logger().info(f"Published trajectory with {num_points} points.")
-
     def pose_to_transform(self, pose):
         quat = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         if np.isclose(np.linalg.norm(quat), 0.0):
@@ -222,54 +158,6 @@ class KinematicsNode(Node):
             response.joint_names = self.joint_names
             response.joint_positions = self.current_joint_positions
         return response
-
-    def joint_space_goal_pose_setter_callback(self, msg: JointState):
-        if self.current_joint_positions is None:
-            self.get_logger().warn("No joint state received yet to plan from.")
-            return
-
-        joint_map = dict(zip(msg.name, msg.position))
-        try:
-            target_positions = [joint_map[name] for name in self.joint_names]
-        except KeyError as e:
-            self.get_logger().warn(f"Missing joint in joint_goal input: {e}")
-            return
-
-        # Check joint limits using your utility function
-        if not check_limits(target_positions):
-            self.get_logger().warn("Requested joint positions exceed joint limits. Ignoring command.")
-            return
-
-        # Proceed with trajectory generation as before
-        total_time = self.get_parameter("total_time").value
-        num_points = self.get_parameter("num_waypoints").value
-        interpolation = self.get_parameter("interpolation_type").value
-
-        trajectory = JointTrajectory()
-        trajectory.header.stamp = self.get_clock().now().to_msg()
-        trajectory.joint_names = self.joint_names
-
-        for i in range(num_points):
-            t_norm = i / (num_points - 1)
-            pos, vel, acc = self.interpolate_joint_trajectory(
-                np.array(self.current_joint_positions),
-                np.array(target_positions),
-                t_norm,
-                total_time,
-                interpolation
-            )
-            point = JointTrajectoryPoint()
-            point.positions = pos.tolist()
-            point.velocities = vel.tolist()
-            point.accelerations = acc.tolist()
-            point.time_from_start = Duration(seconds=(total_time * t_norm)).to_msg()
-            trajectory.points.append(point)
-
-        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
-        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
-
-        self.send_trajectory_goal(trajectory)
-        self.get_logger().info(f"Published trajectory to joint goal with {num_points} points.")
 
     def send_trajectory_goal(self, trajectory: JointTrajectory):
         if not self.trajectory_client.wait_for_server(timeout_sec=2.0):

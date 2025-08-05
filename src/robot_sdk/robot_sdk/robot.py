@@ -82,12 +82,13 @@ class Robot:
             future = self.pose_getter_client.call_async(request)
             rclpy.spin_until_future_complete(self.robot.node, future)
             response = future.result()
+            
             if response is not None:
-                return dict(zip(response.joint_names, response.joint_positions))
+                return np.array(response.joint_positions, dtype=np.float64)
             else:
                 self.robot.node.get_logger().error("Failed to call service get_joint_configuration")
-                return {}
-
+                return None
+            
     class CartesianSpace:
 
         def __init__(self, robot_instance):
@@ -169,7 +170,7 @@ class Robot:
             response = future.result()
             if response is not None:
                 pos = response.pose.pose.position
-                position = [pos.x, pos.y, pos.z]
+                position = np.array([pos.x, pos.y, pos.z])
 
                 quat = [
                     response.pose.pose.orientation.x,

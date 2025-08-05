@@ -1,32 +1,24 @@
+import numpy as np
+
 import rclpy
+from rclpy.action import ActionClient, ActionServer
 from rclpy.node import Node
-from rclpy.time import Duration
-from rclpy.action import ActionClient
-from control_msgs.action import FollowJointTrajectory
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from builtin_interfaces.msg import Duration as BuiltinDuration
 from rclpy.task import Future
-from rclpy.action import ActionServer
-from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
-from sensor_msgs.msg import JointState
+from rclpy.time import Duration
+
+from builtin_interfaces.msg import Duration as BuiltinDuration
+from control_msgs.action import FollowJointTrajectory
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
+from scipy.spatial.transform import Rotation as R, Slerp
+
+from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
 from robot_motion.robot_motion import forward_kinematics, inverse_kinematics
-
-from robot_motion.utills import check_limits
-
-import numpy as np
-from scipy.spatial.transform import Rotation as R, Slerp
-
-def choose_min_movement_solution(current_joints, ik_solutions):
-    current = np.array(current_joints)
-    solutions = np.array(ik_solutions)
-    diffs = np.linalg.norm(solutions - current, axis=1)  # Euclidean distance in joint space
-    best_idx = np.argmin(diffs)
-    return ik_solutions[best_idx]
+from robot_motion.utills import check_limits, chose_optimal_solution
 
 class KinematicsNode(Node):
     def __init__(self):
@@ -206,7 +198,7 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="No IK solution found.")
 
-        end_joints = choose_min_movement_solution(self.current_joint_positions, ik_solutions)
+        end_joints = chose_optimal_solution(self.current_joint_positions, ik_solutions)
 
         total_time = self.get_parameter("total_time").value
         num_points = self.get_parameter("num_waypoints").value

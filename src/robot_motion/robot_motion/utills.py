@@ -11,3 +11,10 @@ def check_limits(joint_angles):
 
 def normalize_angle(angle):
     return (angle + np.pi) % (2 * np.pi) - np.pi
+
+def chose_optimal_solution(current_joints, ik_solutions):
+    current = np.array(current_joints)
+    solutions = np.array(ik_solutions)
+    diffs = np.linalg.norm(solutions - current, axis=1)
+    best_idx = np.argmin(diffs)
+    return ik_solutions[best_idx]

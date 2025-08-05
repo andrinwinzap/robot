@@ -51,7 +51,9 @@ class KinematicsNode(Node):
         self.declare_parameter("num_waypoints", 50)
         self.declare_parameter("tcp_position",    [0.0, 0.0, 0.0])
         self.declare_parameter("tcp_orientation", [1.0, 0.0, 0.0, 0.0])
-
+        self.declare_parameter("robot_position",    [0.0, 0.35, 0.0])
+        self.declare_parameter("robot_orientation", [0.0, 0.0, 0.0, 1.0])
+        
         self.trajectory_client.wait_for_server()
         self.get_logger().info("Robot kinematics node ready.")
 
@@ -78,6 +80,16 @@ class KinematicsNode(Node):
 
         T = np.eye(4)
         T[:3, :3] = R.from_quat(quat).as_matrix()
+        T[:3, 3] = pos
+        return T
+
+    def get_base_transform(self):
+        # robot_position/orientation define T_wr (robot→world)
+        pos = np.array(self.get_parameter("robot_position").value, float)
+        quat = np.array(self.get_parameter("robot_orientation").value, float)
+        quat /= np.linalg.norm(quat)
+        T = np.eye(4)
+        T[:3,:3] = R.from_quat(quat).as_matrix()
         T[:3, 3] = pos
         return T
 
@@ -160,12 +172,34 @@ class KinematicsNode(Node):
             self.get_logger().warn("No joint states available to compute pose.")
             empty_pose = PoseStamped()
             empty_pose.header.stamp = self.get_clock().now().to_msg()
-            empty_pose.header.frame_id = "base_link"
+            empty_pose.header.frame_id = "world"
             response.pose = empty_pose
-        else:
-            T_tool = forward_kinematics(self.current_joint_positions) @ self.get_tcp_offset_transform()
-            pose_stamped = self.transform_to_pose(T_tool)
-            response.pose = pose_stamped
+            return response
+
+        # 1) compute tool-in-base homogeneous transform
+        T_bt = forward_kinematics(self.current_joint_positions) \
+               @ self.get_tcp_offset_transform()
+
+        # 2) get base→world
+        T_wr = self.get_base_transform()
+
+        # 3) compute tool-in-world
+        T_wt = T_wr @ T_bt
+
+        # 4) convert to PoseStamped in "world" frame
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        pose_stamped.header.frame_id = "world"
+        pose_stamped.pose.position.x = T_wt[0, 3]
+        pose_stamped.pose.position.y = T_wt[1, 3]
+        pose_stamped.pose.position.z = T_wt[2, 3]
+        quat = R.from_matrix(T_wt[:3, :3]).as_quat()
+        pose_stamped.pose.orientation.x = quat[0]
+        pose_stamped.pose.orientation.y = quat[1]
+        pose_stamped.pose.orientation.z = quat[2]
+        pose_stamped.pose.orientation.w = quat[3]
+
+        response.pose = pose_stamped
         return response
     
     def joint_space_pose_getter_callback(self, request, response):
@@ -186,13 +220,17 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="No joint state received yet.")
 
-        end_T = self.pose_to_transform(goal.pose.pose)
-        if end_T is None:
+        world_T = self.pose_to_transform(goal.pose.pose)
+        if world_T is None:
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="Invalid target pose.")
 
+        T_wr = self.get_base_transform()
+        T_rw = np.linalg.inv(T_wr)
+
+        end_T_robot = T_rw @ world_T
         tcp_off_T = self.get_tcp_offset_transform()
-        end_T_tool = end_T @ tcp_off_T
+        end_T_tool = end_T_robot @ tcp_off_T
 
         ik_solutions = inverse_kinematics(end_T_tool)
         if not ik_solutions:

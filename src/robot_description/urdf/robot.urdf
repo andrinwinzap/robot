@@ -25,6 +25,21 @@
     </collision>
   </link>
   
+  <link name="world">
+    <origin xyz="0 0 0" rpy="0 -0 0" />
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="1e-9" />
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
+    </inertial>
+  </link>
+  <joint name="world_frame" type="fixed">
+    <origin xyz="0 -0.35 0" rpy="0 -0 0" />
+    <parent link="link_1" />
+    <child link="world" />
+    <axis xyz="0 0 0" />
+  </joint>
+  
   <link name="link_2">
     <inertial>
       <origin xyz="5.19217e-07 -0.0441353 0.045004" rpy="0 0 0" />
@@ -169,7 +184,7 @@
     </collision>
   </link>
   
-  <link name="tool0_tcp">
+  <link name="tool_changer">
     <origin xyz="0 0 0" rpy="0 -0 0" />
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -177,14 +192,14 @@
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
     </inertial>
   </link>
-  <joint name="tool0_tcp_frame" type="fixed">
+  <joint name="tool_changer_frame" type="fixed">
     <origin xyz="-6.41848e-17 8.44637e-18 0.047085" rpy="1.99408e-15 -9.35725e-16 -1.5708" />
     <parent link="link_7" />
-    <child link="tool0_tcp" />
+    <child link="tool_changer" />
     <axis xyz="0 0 0" />
   </joint>
   
-  <link name="tool1_tcp">
+  <link name="gripper_tcp">
     <origin xyz="0 0 0" rpy="0 -0 0" />
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -192,10 +207,10 @@
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
     </inertial>
   </link>
-  <joint name="tool1_tcp_frame" type="fixed">
+  <joint name="gripper_tcp_frame" type="fixed">
     <origin xyz="-2.15106e-16 2.25417e-16 0.106885" rpy="2.58091e-15 -6.24476e-15 -1.5708" />
     <parent link="link_7" />
-    <child link="tool1_tcp" />
+    <child link="gripper_tcp" />
     <axis xyz="0 0 0" />
   </joint>
   

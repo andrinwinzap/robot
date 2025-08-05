@@ -7,6 +7,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from rclpy.action import ActionClient
+from rcl_interfaces.srv import SetParameters, GetParameters
+from rcl_interfaces.msg import Parameter, ParameterType
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
@@ -16,8 +18,40 @@ class Robot:
         self.node = Node("robot_sdk_client")
         self.tcp_orientation = [np.pi, 0.0, 0.0]
 
+        self.set_param_client = self.node.create_client(
+            SetParameters,
+            '/robot_motion_node/set_parameters'
+        )
+        self.get_param_client = self.node.create_client(
+            GetParameters,
+            '/robot_motion_node/get_parameters'
+        )
+
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
+
+    def _set_param(self, name, value):
+        param = Parameter()
+        param.name = name
+        param.value.type = ParameterType.PARAMETER_DOUBLE
+        param.value.double_value = value
+
+        req = SetParameters.Request()
+        req.parameters = [param]
+        future = self.set_param_client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future)
+        resp = future.result()
+        return resp.results[0].successful
+
+    def _get_param(self, name):
+        req = GetParameters.Request()
+        req.names = [name]
+        future = self.get_param_client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future)
+        resp = future.result()
+        if resp and len(resp.values) > 0 and resp.values[0].type == ParameterType.PARAMETER_DOUBLE:
+            return resp.values[0].double_value
+        return None
 
     def shutdown(self):
         self.node.destroy_node()
@@ -88,6 +122,15 @@ class Robot:
             else:
                 self.robot.node.get_logger().error("Failed to call service get_joint_configuration")
                 return None
+            
+        def set_speed(self, speed):
+            if self.robot._set_param('joint_space_speed', speed):
+                self.robot.node.get_logger().info(f"Set joint space speed to {speed}")
+            else:
+                self.robot.node.get_logger().error("Failed to set joint space speed")
+
+        def get_speed(self):
+            return self.robot._get_param('joint_space_speed')
             
     class CartesianSpace:
 
@@ -189,3 +232,12 @@ class Robot:
             else:
                 self.robot.node.get_logger().error("Failed to call service get_current_pose")
                 return None, None
+            
+        def set_speed(self, speed):
+            if self.robot._set_param('cartesian_space_speed', speed):
+                self.robot.node.get_logger().info(f"Set cartesian space speed to {speed}")
+            else:
+                self.robot.node.get_logger().error("Failed to set cartesian space speed")
+
+        def get_speed(self):
+            return self.robot._get_param('cartesian_space_speed')

@@ -11,6 +11,7 @@ from rcl_interfaces.srv import SetParameters, GetParameters
 from rcl_interfaces.msg import Parameter, ParameterType
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
+from robot_motion.types import InterpolationType
 
 class Robot:
     def __init__(self):
@@ -27,14 +28,33 @@ class Robot:
             '/robot_motion_node/get_parameters'
         )
 
+        self.trajectory_generator = self.TrajectoryGenerator(self)
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
-    def _set_param(self, name, value):
+    def _set_param(self, name: str, value):
         param = Parameter()
         param.name = name
-        param.value.type = ParameterType.PARAMETER_DOUBLE
-        param.value.double_value = value
+
+        # Infer type & fill appropriate field
+        if isinstance(value, bool):
+            param.value.type = ParameterType.PARAMETER_BOOL
+            param.value.bool_value = value
+
+        elif isinstance(value, int):
+            param.value.type = ParameterType.PARAMETER_INTEGER
+            param.value.integer_value = value
+
+        elif isinstance(value, float):
+            param.value.type = ParameterType.PARAMETER_DOUBLE
+            param.value.double_value = value
+
+        elif isinstance(value, str):
+            param.value.type = ParameterType.PARAMETER_STRING
+            param.value.string_value = value
+
+        else:
+            raise ValueError(f"Unsupported parameter type: {type(value)}")
 
         req = SetParameters.Request()
         req.parameters = [param]
@@ -43,20 +63,61 @@ class Robot:
         resp = future.result()
         return resp.results[0].successful
 
-    def _get_param(self, name):
+    def _get_param(self, name: str):
         req = GetParameters.Request()
         req.names = [name]
         future = self.get_param_client.call_async(req)
         rclpy.spin_until_future_complete(self.node, future)
         resp = future.result()
-        if resp and len(resp.values) > 0 and resp.values[0].type == ParameterType.PARAMETER_DOUBLE:
-            return resp.values[0].double_value
-        return None
+        if not resp or not resp.values:
+            return None
+
+        val = resp.values[0]
+        t = val.type
+
+        if t == ParameterType.PARAMETER_BOOL:
+            return val.bool_value
+
+        elif t == ParameterType.PARAMETER_INTEGER:
+            return val.integer_value
+
+        elif t == ParameterType.PARAMETER_DOUBLE:
+            return val.double_value
+
+        elif t == ParameterType.PARAMETER_STRING:
+            return val.string_value
+
+        else:
+            # you could handle arrays here (PARAMETER_BYTE_ARRAY, etc.)
+            self.node.get_logger().warn(f"Parameter '{name}' has unsupported type {t}")
+            return None
 
     def shutdown(self):
         self.node.destroy_node()
         rclpy.shutdown()
 
+    class TrajectoryGenerator:
+        def __init__(self, robot_instance):
+            self.robot = robot_instance
+
+        def set_num_waypoints(self, num_waypoints):
+            if self.robot._set_param('num_waypoints', num_waypoints):
+                self.robot.node.get_logger().info(f"Set num_waypoints to {num_waypoints}")
+            else:
+                self.robot.node.get_logger().error("Failed to set num_waypoints")
+
+        def get_num_waypoints(self):
+            return self.robot._get_param('num_waypoints')
+        
+        def set_interpolation_type(self, interpolation_type):
+            if self.robot._set_param('interpolation_type', interpolation_type):
+                self.robot.node.get_logger().info(f"Set interpolation_type to {interpolation_type}")
+            else:
+                self.robot.node.get_logger().error("Failed to set interpolation_type")
+            
+        def get_interpolation_type(self):
+            return self.robot._get_param('interpolation_type')
+        
     class JointSpace:
         def __init__(self, robot_instance):
             self.robot = robot_instance

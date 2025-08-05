@@ -16,6 +16,7 @@ from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
 from robot_motion.robot_motion import forward_kinematics, inverse_kinematics
 from robot_motion.utills import check_limits, chose_optimal_solution
+from robot_motion.types import InterpolationType
 
 class KinematicsNode(Node):
     def __init__(self):
@@ -93,11 +94,11 @@ class KinematicsNode(Node):
         acc = np.zeros_like(q0)
         t_scaled = t * T
 
-        if mode == "linear":
+        if mode == InterpolationType.Linear:
             pos = q0 + dq * t
             vel = dq / T
             acc = np.zeros_like(q0)
-        elif mode == "cubic":
+        elif mode == InterpolationType.Cubic:
             a0 = q0
             a1 = 0
             a2 = 3 * dq / T**2
@@ -105,7 +106,7 @@ class KinematicsNode(Node):
             pos = a0 + a2 * t_scaled**2 + a3 * t_scaled**3
             vel = 2 * a2 * t_scaled + 3 * a3 * t_scaled**2
             acc = 2 * a2 + 6 * a3 * t_scaled
-        elif mode == "quintic":
+        elif mode == InterpolationType.Quintic:
             a0 = q0
             a1 = 0
             a2 = 0

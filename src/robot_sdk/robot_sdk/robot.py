@@ -17,7 +17,6 @@ class Robot:
     def __init__(self):
         rclpy.init()
         self.node = Node("robot_sdk_client")
-        self.tcp_orientation = [np.pi, 0.0, 0.0]
 
         self.set_param_client = self.node.create_client(
             SetParameters,
@@ -28,6 +27,7 @@ class Robot:
             '/robot_motion_node/get_parameters'
         )
 
+        self.tool_changer = self.ToolChanger(self)
         self.trajectory_generator = self.TrajectoryGenerator(self)
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
@@ -36,7 +36,6 @@ class Robot:
         param = Parameter()
         param.name = name
 
-        # Infer type & fill appropriate field
         if isinstance(value, bool):
             param.value.type = ParameterType.PARAMETER_BOOL
             param.value.bool_value = value
@@ -52,6 +51,10 @@ class Robot:
         elif isinstance(value, str):
             param.value.type = ParameterType.PARAMETER_STRING
             param.value.string_value = value
+
+        elif isinstance(value, (list, tuple)):
+            param.value.type = ParameterType.PARAMETER_DOUBLE_ARRAY
+            param.value.double_array_value = list(value)
 
         else:
             raise ValueError(f"Unsupported parameter type: {type(value)}")
@@ -87,14 +90,54 @@ class Robot:
         elif t == ParameterType.PARAMETER_STRING:
             return val.string_value
 
+        elif t == ParameterType.PARAMETER_DOUBLE_ARRAY:
+            return list(val.double_array_value)
+
         else:
-            # you could handle arrays here (PARAMETER_BYTE_ARRAY, etc.)
             self.node.get_logger().warn(f"Parameter '{name}' has unsupported type {t}")
             return None
-
+    
     def shutdown(self):
         self.node.destroy_node()
         rclpy.shutdown()
+
+    class ToolChanger:
+        def __init__(self, robot_instance):
+            self.robot = robot_instance
+
+        def set_tcp_position(self, position):
+            if self.robot._set_param('tcp_position', position):
+                self.robot.node.get_logger().info(f"Set tcp_position to {position}")
+            else:
+                self.robot.node.get_logger().error("Failed to set tcp_position")
+
+        def get_tcp_position(self):
+            return self._get_param('tcp_position')
+
+        def set_tcp_orientation(self, rpy):
+            if len(rpy) != 3:
+                self.robot.node.get_logger().error("Orientation must be [roll, pitch, yaw]")
+                return False
+            
+            rot = R.from_euler('xyz', rpy)
+            quat = rot.as_quat()
+            
+            if self.robot._set_param('tcp_orientation', quat.tolist()):
+                self.robot.node.get_logger().info(f"Set tcp_orientation quaternion to {quat.tolist()}")
+                return True
+            else:
+                self.robot.node.get_logger().error("Failed to set tcp_orientation")
+                return False
+
+        def get_tcp_orientation(self):
+            quat = self.robot._get_param('tcp_orientation')
+            if quat is None or len(quat) != 4:
+                self.robot.node.get_logger().warn("tcp_orientation parameter missing or invalid length")
+                return None
+            
+            rot = R.from_quat(quat)
+            rpy = rot.as_euler('xyz', degrees=False)
+            return rpy.tolist()
 
     class TrajectoryGenerator:
         def __init__(self, robot_instance):
@@ -208,15 +251,8 @@ class Robot:
                 self.robot.node.get_logger().error("Service '/robot_motion/cartesian_space/get_pose' not available.")
 
         def move(self, position, orientation=None):
-            tcp_rot = R.from_euler('xyz', self.robot.tcp_orientation)
 
-            if orientation is None:
-                final_rot = tcp_rot
-            else:
-                user_rot = R.from_euler('xyz', orientation)
-                final_rot = user_rot * tcp_rot
-
-            quat = final_rot.as_quat()
+            quat = R.from_euler('xyz', orientation).as_quat()
 
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.robot.node.get_clock().now().to_msg()
@@ -283,11 +319,7 @@ class Robot:
                     response.pose.pose.orientation.w,
                 ]
 
-                rot = R.from_quat(quat)
-                tcp_rot = R.from_euler('xyz', self.robot.tcp_orientation)
-                tcp_rot_inv = tcp_rot.inv()
-                adjusted_rot = rot * tcp_rot_inv
-                euler_angles = adjusted_rot.as_euler('xyz')
+                euler_angles = R.from_quat(quat).as_euler('xyz')
 
                 return position, euler_angles
             else:

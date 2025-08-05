@@ -49,9 +49,37 @@ class KinematicsNode(Node):
         self.declare_parameter("joint_space_speed", 1.0)       # rad/s
         self.declare_parameter("cartesian_space_speed", 0.05)   # m/s
         self.declare_parameter("num_waypoints", 50)
+        self.declare_parameter("tcp_position",    [0.0, 0.0, 0.0])
+        self.declare_parameter("tcp_orientation", [1.0, 0.0, 0.0, 0.0])
 
         self.trajectory_client.wait_for_server()
         self.get_logger().info("Robot kinematics node ready.")
+
+    def get_tcp_offset_transform(self):
+        pos_param = list(self.get_parameter("tcp_position").value)
+        quat_param = list(self.get_parameter("tcp_orientation").value)
+
+        if not (isinstance(pos_param, list) and len(pos_param) == 3):
+            self.get_logger().warn("tcp_position must be a list of 3 floats [x, y, z]")
+            return np.eye(4)
+
+        if not (isinstance(quat_param, list) and len(quat_param) == 4):
+            self.get_logger().warn("tcp_orientation must be a list of 4 floats [x, y, z, w]")
+            return np.eye(4)
+
+        pos = np.array(pos_param, float)
+        quat = np.array(quat_param, float)
+
+        if np.linalg.norm(quat) == 0:
+            self.get_logger().warn("tcp_orientation quaternion must not be zero.")
+            return np.eye(4)
+
+        quat /= np.linalg.norm(quat)
+
+        T = np.eye(4)
+        T[:3, :3] = R.from_quat(quat).as_matrix()
+        T[:3, 3] = pos
+        return T
 
     def joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -135,9 +163,9 @@ class KinematicsNode(Node):
             empty_pose.header.frame_id = "base_link"
             response.pose = empty_pose
         else:
-            T = forward_kinematics(self.current_joint_positions)
-            pose_stamped = self.transform_to_pose(T)  # this returns a PoseStamped
-            response.pose = pose_stamped  # Assign full PoseStamped, not just Pose
+            T_tool = forward_kinematics(self.current_joint_positions) @ self.get_tcp_offset_transform()
+            pose_stamped = self.transform_to_pose(T_tool)
+            response.pose = pose_stamped
         return response
     
     def joint_space_pose_getter_callback(self, request, response):
@@ -163,16 +191,19 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="Invalid target pose.")
 
-        ik_solutions = inverse_kinematics(end_T)
+        tcp_off_T = self.get_tcp_offset_transform()
+        end_T_tool = end_T @ tcp_off_T
+
+        ik_solutions = inverse_kinematics(end_T_tool)
         if not ik_solutions:
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="No IK solution found.")
 
         end_joints = chose_optimal_solution(self.current_joint_positions, ik_solutions)
 
-        start_T = forward_kinematics(self.current_joint_positions)
+        start_T = forward_kinematics(self.current_joint_positions) @ self.get_tcp_offset_transform()
         start_pos = np.array(start_T[:3, 3])
-        end_pos = np.array(end_T[:3, 3])
+        end_pos = np.array(end_T_tool[:3, 3])
         dist = np.linalg.norm(end_pos - start_pos)
 
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value

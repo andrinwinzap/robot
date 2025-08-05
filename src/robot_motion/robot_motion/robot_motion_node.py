@@ -45,7 +45,8 @@ class KinematicsNode(Node):
         )
 
         self.declare_parameter("interpolation_type", "cubic")
-        self.declare_parameter("total_time", 5.0)
+        self.declare_parameter("joint_space_speed", 1.0)       # rad/s
+        self.declare_parameter("cartesian_space_speed", 0.05)   # m/s
         self.declare_parameter("num_waypoints", 50)
 
         self.trajectory_client.wait_for_server()
@@ -168,12 +169,21 @@ class KinematicsNode(Node):
 
         end_joints = chose_optimal_solution(self.current_joint_positions, ik_solutions)
 
+        start_T = forward_kinematics(self.current_joint_positions)
+        start_pos = np.array(start_T[:3, 3])
+        end_pos = np.array(end_T[:3, 3])
+        dist = np.linalg.norm(end_pos - start_pos)
+
+        cartesian_space_speed = self.get_parameter("cartesian_space_speed").value
+        total_time = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
+
         return await self.send_trajectory(
             start=self.current_joint_positions,
             end=end_joints,
             goal_handle=goal_handle,
             result_type=CartesianSpaceMotion.Result,
-            feedback_type=CartesianSpaceMotion.Feedback
+            feedback_type=CartesianSpaceMotion.Feedback,
+            total_time=total_time
         )
 
     async def joint_space_motion_callback(self, goal_handle):
@@ -195,12 +205,18 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return JointSpaceMotion.Result(success=False, message="Joint limits exceeded.")
 
+        joint_space_speed = self.get_parameter("joint_space_speed").value
+        dq = np.abs(np.array(end_joints) - np.array(self.current_joint_positions))
+        max_dq = np.max(dq)
+        total_time = max_dq / joint_space_speed if joint_space_speed > 0 else 5.0
+
         return await self.send_trajectory(
             start=self.current_joint_positions,
             end=end_joints,
             goal_handle=goal_handle,
             result_type=JointSpaceMotion.Result,
-            feedback_type=JointSpaceMotion.Feedback
+            feedback_type=JointSpaceMotion.Feedback,
+            total_time=total_time
         )
 
     def create_trajectory(self, start, end, total_time, num_points, interpolation):
@@ -230,8 +246,7 @@ class KinematicsNode(Node):
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
         return trajectory
 
-    async def send_trajectory(self, start, end, goal_handle, result_type, feedback_type):
-        total_time = self.get_parameter("total_time").value
+    async def send_trajectory(self, start, end, goal_handle, result_type, feedback_type, total_time):
         num_points = self.get_parameter("num_waypoints").value
         interpolation = self.get_parameter("interpolation_type").value
 

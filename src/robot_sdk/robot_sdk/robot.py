@@ -4,6 +4,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import rclpy
 from rclpy.node import Node
+from rclpy.logging import LoggingSeverity
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from rclpy.action import ActionClient
@@ -14,9 +15,13 @@ from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 from robot_motion.types import InterpolationType
 
 class Robot:
-    def __init__(self):
+    def __init__(self, log_level=LoggingSeverity.INFO):
         rclpy.init()
-        self.node = Node("robot_sdk_client")
+        self.node = Node(
+                "robot_sdk_client",
+                automatically_declare_parameters_from_overrides=True
+            )
+        self.node.get_logger().set_level(log_level)
 
         self.set_param_client = self.node.create_client(
             SetParameters,

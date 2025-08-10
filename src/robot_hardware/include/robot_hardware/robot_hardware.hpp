@@ -31,6 +31,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include <std_msgs/msg/float32_multi_array.hpp>
 
 using hardware_interface::return_type;
 
@@ -56,24 +57,24 @@ namespace robot_hardware
   private:
     // ROS 2 Node handle for publishers and subscribers
     rclcpp::Node::SharedPtr node_;
-    
+
     // Publishers and subscribers for each joint
-    std::vector<rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr> position_publishers_;
+    std::vector<rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr> command_publishers_;
     std::vector<rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr> position_subscribers_;
     std::vector<rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr> velocity_subscribers_;
-    
+
     // Internal arrays to hold joint states and commands
     std::vector<double> joint_positions_;
     std::vector<double> joint_velocities_;
     std::vector<double> joint_commands_;
-    
+
     // Mutex to protect concurrent access to joint_positions_ and joint_velocities_
     std::mutex joint_state_mutex_;
-    
+
     // Thread for spinning the ROS node
     std::thread spin_thread_;
     std::atomic<bool> should_stop_;
-    
+
     // Executor for handling callbacks
     rclcpp::executors::SingleThreadedExecutor::SharedPtr executor_;
   };

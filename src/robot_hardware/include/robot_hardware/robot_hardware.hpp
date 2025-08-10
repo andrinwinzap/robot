@@ -60,8 +60,7 @@ namespace robot_hardware
 
     // Publishers and subscribers for each joint
     std::vector<rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr> command_publishers_;
-    std::vector<rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr> position_subscribers_;
-    std::vector<rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr> velocity_subscribers_;
+    std::vector<rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr> state_subscribers_;
 
     // Internal arrays to hold joint states and commands
     std::vector<double> joint_positions_;

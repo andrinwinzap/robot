@@ -47,8 +47,7 @@ namespace robot_hardware
       joint_velocities_.resize(num_joints, 0.0);
       joint_commands_.resize(num_joints, 0.0);
       command_publishers_.resize(num_joints);
-      position_subscribers_.resize(num_joints);
-      velocity_subscribers_.resize(num_joints);
+      state_subscribers_.resize(num_joints);
 
       RCLCPP_INFO(node_->get_logger(), "Initializing hardware interface with %zu joints", num_joints);
 
@@ -57,36 +56,34 @@ namespace robot_hardware
       {
         const std::string &joint_name = info_.joints[i].name;
 
+        // Command publisher
         std::string cmd_topic = "/robot/" + joint_name + "/send_command";
-        command_publishers_[i] = node_->create_publisher<std_msgs::msg::Float32MultiArray>(cmd_topic, 10);
+        command_publishers_[i] =
+            node_->create_publisher<std_msgs::msg::Float32MultiArray>(cmd_topic, 10);
 
-        // Subscriber to micro-ROS get_position topic
-        std::string get_position_topic = "/robot/" + joint_name + "/get_position";
-        position_subscribers_[i] = node_->create_subscription<std_msgs::msg::Float32>(
-            get_position_topic, 10,
-            [this, i, joint_name](std_msgs::msg::Float32::SharedPtr msg)
-            {
-              std::lock_guard<std::mutex> lock(this->joint_state_mutex_);
-              this->joint_positions_[i] = static_cast<double>(msg->data);
-              RCLCPP_DEBUG(this->node_->get_logger(),
-                           "Received position for joint %s: %f", joint_name.c_str(), msg->data);
-            });
-
-        // Subscriber to micro-ROS get_velocity topic
-        std::string get_velocity_topic = "/robot/" + joint_name + "/get_velocity";
-        velocity_subscribers_[i] = node_->create_subscription<std_msgs::msg::Float32>(
-            get_velocity_topic, 10,
-            [this, i, joint_name](std_msgs::msg::Float32::SharedPtr msg)
-            {
-              std::lock_guard<std::mutex> lock(this->joint_state_mutex_);
-              this->joint_velocities_[i] = static_cast<double>(msg->data);
-              RCLCPP_DEBUG(this->node_->get_logger(),
-                           "Received velocity for joint %s: %f", joint_name.c_str(), msg->data);
-            });
-
-        RCLCPP_INFO(node_->get_logger(),
-                    "Created publisher/subscriber for joint '%s' (topics: %s, %s, %s)",
-                    joint_name.c_str(), cmd_topic.c_str(), get_position_topic.c_str(), get_velocity_topic.c_str());
+        // State subscriber
+        std::string get_state_topic = "/robot/" + joint_name + "/get_state"; // <-- this was missing
+        state_subscribers_[i] =
+            node_->create_subscription<std_msgs::msg::Float32MultiArray>(
+                get_state_topic, 10,
+                [this, i, joint_name](const std_msgs::msg::Float32MultiArray::SharedPtr msg)
+                {
+                  if (msg->data.size() >= 2)
+                  {
+                    std::lock_guard<std::mutex> lock(this->joint_state_mutex_);
+                    this->joint_positions_[i] = static_cast<double>(msg->data[0]);
+                    this->joint_velocities_[i] = static_cast<double>(msg->data[1]);
+                    RCLCPP_DEBUG(this->node_->get_logger(),
+                                 "Received state for joint %s: position=%f, velocity=%f",
+                                 joint_name.c_str(), msg->data[0], msg->data[1]);
+                  }
+                  else
+                  {
+                    RCLCPP_WARN(this->node_->get_logger(),
+                                "Received state for joint %s with insufficient data: size=%zu",
+                                joint_name.c_str(), msg->data.size());
+                  }
+                });
       }
     }
     catch (const std::exception &e)

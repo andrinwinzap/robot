@@ -21,6 +21,12 @@ def generate_launch_description():
         FindPackageShare("robot_bringup"), "config", "robot_controllers.yaml"
     ])
 
+    rviz_config_file = PathJoinSubstitution([
+        FindPackageShare("robot_description"),
+        "rviz",
+        "view_robot.rviz"
+    ])
+
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
@@ -47,9 +53,25 @@ def generate_launch_description():
         arguments=["joint_trajectory_controller"],
     )
 
+    robot_motion_node = Node(
+        package="robot_motion",
+        executable="robot_motion_node",
+        output="both",
+    )
+
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="log",
+        arguments=["-d", rviz_config_file],
+    )
+
     return LaunchDescription([
         control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         joint_trajectory_controller_spawner,
+        robot_motion_node,
+        rviz_node
     ])

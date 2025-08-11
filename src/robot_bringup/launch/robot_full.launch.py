@@ -67,11 +67,29 @@ def generate_launch_description():
         arguments=["-d", rviz_config_file],
     )
 
+    microros_agents = [
+        Node(
+            package="micro_ros_agent",
+            executable="micro_ros_agent",
+            name=f"agent_usb{i}",
+            output="screen",
+            arguments=["serial", "--dev", dev, "-b", "921600", "-v4"]
+        )
+        for i, dev in enumerate([
+            "/dev/ttyUSB3",
+            "/dev/ttyUSB4",
+            "/dev/ttyUSB6",
+            "/dev/ttyUSB8",
+            "/dev/ttyUSB0"
+        ])
+    ]
+
     return LaunchDescription([
         control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         joint_trajectory_controller_spawner,
         robot_motion_node,
-        rviz_node
+        rviz_node,
+        *microros_agents
     ])

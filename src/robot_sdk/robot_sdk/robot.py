@@ -191,21 +191,14 @@ class Robot:
             def feedback_callback(feedback_msg):
                 feedback = feedback_msg.feedback
 
-                # Extract arrays from feedback
                 desired_positions = getattr(feedback, 'desired_positions', [])
-                desired_velocities = getattr(feedback, 'desired_velocities', [])
                 actual_positions = getattr(feedback, 'actual_positions', [])
-                actual_velocities = getattr(feedback, 'actual_velocities', [])
 
-                # Format the info string to log
-                info_msg = (
-                    f"JointSpaceMotion feedback:\n"
-                    f"  Desired Positions: {desired_positions}\n"
-                    f"  Desired Velocities: {desired_velocities}\n"
-                    f"  Actual Positions: {actual_positions}\n"
-                    f"  Actual Velocities: {actual_velocities}"
-                )
-                self.robot.node.get_logger().debug(info_msg)
+                if len(desired_positions) == len(actual_positions) and desired_positions:
+                    pos_error = [d - a for d, a in zip(desired_positions, actual_positions)]
+                    self.robot.node.get_logger().debug(f"Joint position error: {pos_error}")
+                else:
+                    self.robot.node.get_logger().warn("Invalid feedback data for position error computation")
                 
             goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=feedback_callback)
             rclpy.spin_until_future_complete(self.robot.node, goal_future)
@@ -278,21 +271,14 @@ class Robot:
             def feedback_callback(feedback_msg):
                 feedback = feedback_msg.feedback
 
-                # Extract arrays from feedback
                 desired_positions = getattr(feedback, 'desired_positions', [])
-                desired_velocities = getattr(feedback, 'desired_velocities', [])
                 actual_positions = getattr(feedback, 'actual_positions', [])
-                actual_velocities = getattr(feedback, 'actual_velocities', [])
 
-                # Format the info string to log
-                info_msg = (
-                    f"CartesianSpaceMotion feedback:\n"
-                    f"  Desired Positions: {desired_positions}\n"
-                    f"  Desired Velocities: {desired_velocities}\n"
-                    f"  Actual Positions: {actual_positions}\n"
-                    f"  Actual Velocities: {actual_velocities}"
-                )
-                self.robot.node.get_logger().debug(info_msg)
+                if len(desired_positions) == len(actual_positions) and desired_positions:
+                    pos_error = [d - a for d, a in zip(desired_positions, actual_positions)]
+                    self.robot.node.get_logger().debug(f"Joint position error: {pos_error}")
+                else:
+                    self.robot.node.get_logger().warn("Invalid feedback data for position error computation")
 
             goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=feedback_callback)
             rclpy.spin_until_future_complete(self.robot.node, goal_future)

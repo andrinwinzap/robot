@@ -42,6 +42,30 @@ class Robot:
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
+    def feedback_callback(self, feedback_msg):
+        feedback = feedback_msg.feedback
+
+        desired_positions = getattr(feedback, 'desired_positions', [])
+        actual_positions = getattr(feedback, 'actual_positions', [])
+
+        desired_velocities = getattr(feedback, 'desired_velocities', [])
+        actual_velocities = getattr(feedback, 'actual_velocities', [])
+
+        if len(desired_positions) == len(actual_positions) and desired_positions:
+            pos_error = [d - a for d, a in zip(desired_positions, actual_positions)]
+            formatted_pos_error = ", ".join(f"{e:+.4f}" for e in pos_error)
+            self.node.get_logger().debug(f"Joint position error: [{formatted_pos_error}]")
+        else:
+            self.node.get_logger().warn("Invalid feedback data for position error computation")
+
+        if len(desired_velocities) == len(actual_velocities) and desired_velocities:
+            vel_error = [d - a for d, a in zip(desired_velocities, actual_velocities)]
+            formatted_vel_error = ", ".join(f"{e:+.4f}" for e in vel_error)
+            self.node.get_logger().debug(f"Joint velocity error: [{formatted_vel_error}]")
+        else:
+            self.node.get_logger().warn("Invalid feedback data for velocity error computation")
+
+
     def set_simulation_mode(self, value):
         param = Parameter()
         param.name = "simulation_mode"
@@ -208,20 +232,8 @@ class Robot:
             goal_msg.joint_state.position = joint_positions
 
             self.pose_setter_client.wait_for_server()
-
-            def feedback_callback(feedback_msg):
-                feedback = feedback_msg.feedback
-
-                desired_positions = getattr(feedback, 'desired_positions', [])
-                actual_positions = getattr(feedback, 'actual_positions', [])
-
-                if len(desired_positions) == len(actual_positions) and desired_positions:
-                    pos_error = [d - a for d, a in zip(desired_positions, actual_positions)]
-                    self.robot.node.get_logger().debug(f"Joint position error: {pos_error}")
-                else:
-                    self.robot.node.get_logger().warn("Invalid feedback data for position error computation")
                 
-            goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=feedback_callback)
+            goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=self.robot.feedback_callback)
             rclpy.spin_until_future_complete(self.robot.node, goal_future)
             goal_handle = goal_future.result()
             if not goal_handle.accepted:
@@ -291,19 +303,7 @@ class Robot:
 
             self.pose_setter_client.wait_for_server()
 
-            def feedback_callback(feedback_msg):
-                feedback = feedback_msg.feedback
-
-                desired_positions = getattr(feedback, 'desired_positions', [])
-                actual_positions = getattr(feedback, 'actual_positions', [])
-
-                if len(desired_positions) == len(actual_positions) and desired_positions:
-                    pos_error = [d - a for d, a in zip(desired_positions, actual_positions)]
-                    self.robot.node.get_logger().debug(f"Joint position error: {pos_error}")
-                else:
-                    self.robot.node.get_logger().warn("Invalid feedback data for position error computation")
-
-            goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=feedback_callback)
+            goal_future = self.pose_setter_client.send_goal_async(goal_msg, feedback_callback=self.robot.feedback_callback)
             rclpy.spin_until_future_complete(self.robot.node, goal_future)
             goal_handle = goal_future.result()
             if not goal_handle.accepted:

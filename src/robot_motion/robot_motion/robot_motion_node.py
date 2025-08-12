@@ -53,6 +53,9 @@ class KinematicsNode(Node):
         self.declare_parameter("tcp_orientation", [1.0, 0.0, 0.0, 0.0])
         self.declare_parameter("robot_position",    [0.0, 0.35, 0.0])
         self.declare_parameter("robot_orientation", [0.0, 0.0, 0.0, 1.0])
+        self.declare_parameter("joint_velocity_limits", [5.0, 5.0, 5.0, 5.0, 5.0, 5.0])       # rad/s
+        self.declare_parameter("joint_acceleration_limits", [3.14, 3.14, 3.14, 3.14, 3.14, 3.14])   # rad/s^2
+
         
         self.trajectory_client.wait_for_server()
         self.get_logger().info("Robot kinematics node ready.")
@@ -245,7 +248,9 @@ class KinematicsNode(Node):
         dist = np.linalg.norm(end_pos - start_pos)
 
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value
-        total_time = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
+        time_cartesian_space = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
+
+        total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints, time_cartesian_space)
 
         return await self.send_trajectory(
             start=self.current_joint_positions,
@@ -275,10 +280,7 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return JointSpaceMotion.Result(success=False, message="Joint limits exceeded.")
 
-        joint_space_speed = self.get_parameter("joint_space_speed").value
-        dq = np.abs(np.array(end_joints) - np.array(self.current_joint_positions))
-        max_dq = np.max(dq)
-        total_time = max_dq / joint_space_speed if joint_space_speed > 0 else 5.0
+        total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints)
 
         return await self.send_trajectory(
             start=self.current_joint_positions,
@@ -359,6 +361,19 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return result_type(success=False, message=f"Controller failed with error code {result.error_code}")
 
+    def compute_synchronized_time(self, start, end, time_cartesian_space=0):
+        joint_space_speed = self.get_parameter("joint_space_speed").value
+        joint_velocity_limits = np.array(self.get_parameter("joint_velocity_limits").value)  # rad/s
+        joint_acceleration_limits = np.array(self.get_parameter("joint_acceleration_limits").value)  # rad/s^2
+
+        dq = np.abs(np.array(end) - np.array(start))
+
+        time_joint_space_speed = np.max(dq) / joint_space_speed
+        time_vel_limits = np.max(dq / joint_velocity_limits)
+        time_acc_limits = np.max(2.0 * np.sqrt(dq / joint_acceleration_limits))
+
+        return max(time_cartesian_space, time_joint_space_speed, time_vel_limits, time_acc_limits)
+    
 def main(args=None):
     rclpy.init(args=args)
     node = KinematicsNode()

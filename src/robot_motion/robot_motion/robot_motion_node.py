@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation as R
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
-from robot_motion.robot_motion import forward_kinematics, inverse_kinematics
+from robot_motion.kinematics import forward_kinematics, inverse_kinematics
 from robot_motion.utills import check_limits, chose_optimal_solution
 from robot_motion.types import InterpolationType
 

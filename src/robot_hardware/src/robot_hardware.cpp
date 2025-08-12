@@ -36,6 +36,27 @@ namespace robot_hardware
       // Create ROS 2 node for hardware interface
       node_ = rclcpp::Node::make_shared("robot_hardware_interface");
 
+      simulation_mode_.store(
+          node_->declare_parameter<bool>("simulation_mode", false));
+
+      param_callback_handle_ = node_->add_on_set_parameters_callback(
+          [this](const std::vector<rclcpp::Parameter> &params)
+          {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            for (const auto &p : params)
+            {
+              if (p.get_name() == "simulation_mode")
+              {
+                simulation_mode_.store(p.as_bool());
+                RCLCPP_INFO(node_->get_logger(),
+                            "simulation_mode changed to: %s",
+                            simulation_mode_.load() ? "true" : "false");
+              }
+            }
+            return result;
+          });
+
       // Create executor
       executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
       executor_->add_node(node_);
@@ -177,7 +198,7 @@ namespace robot_hardware
     return CallbackReturn::SUCCESS;
   }
 
-  return_type RobotSystem::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+  return_type RobotSystem::read(const rclcpp::Time & /*time*/, const rclcpp::Duration &period)
   {
     // Copy current micro-ROS joint positions and velocities into ros2_control joint state interfaces
     std::lock_guard<std::mutex> lock(joint_state_mutex_);
@@ -187,8 +208,16 @@ namespace robot_hardware
       const std::string pos_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
       const std::string vel_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
 
-      set_state(pos_name, joint_positions_[i]);
-      set_state(vel_name, joint_velocities_[i]);
+      if (!simulation_mode_.load())
+      {
+        set_state(vel_name, joint_velocities_[i]);
+        set_state(pos_name, joint_positions_[i]);
+      }
+      else
+      {
+        set_state(vel_name, get_command(vel_name));
+        set_state(pos_name, get_state(pos_name) + get_state(vel_name) * period.seconds());
+      }
 
       // For debugging - can be removed in production
       RCLCPP_DEBUG(node_->get_logger(),
@@ -201,30 +230,32 @@ namespace robot_hardware
 
   return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
   {
-    // Send ros2_control joint commands (position and velocity) to micro-ROS topics
-    for (size_t i = 0; i < info_.joints.size(); i++)
+    if (!simulation_mode_.load())
     {
-      // Fetch commands from ros2_control for position and velocity
-      const std::string pos_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
-      const std::string vel_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
-      double position_cmd = get_command(pos_cmd_name);
-      double velocity_cmd = get_command(vel_cmd_name);
+      // Send ros2_control joint commands (position and velocity) to micro-ROS topics
+      for (size_t i = 0; i < info_.joints.size(); i++)
+      {
+        // Fetch commands from ros2_control for position and velocity
+        const std::string pos_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
+        const std::string vel_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
+        double position_cmd = get_command(pos_cmd_name);
+        double velocity_cmd = get_command(vel_cmd_name);
 
-      // Pack commands into a Float32MultiArray
-      std_msgs::msg::Float32MultiArray msg;
-      msg.data.resize(2);
-      msg.data[0] = static_cast<float>(position_cmd);
-      msg.data[1] = static_cast<float>(velocity_cmd);
+        // Pack commands into a Float32MultiArray
+        std_msgs::msg::Float32MultiArray msg;
+        msg.data.resize(2);
+        msg.data[0] = static_cast<float>(position_cmd);
+        msg.data[1] = static_cast<float>(velocity_cmd);
 
-      // Publish to the joint's topic
-      command_publishers_[i]->publish(msg);
+        // Publish to the joint's topic
+        command_publishers_[i]->publish(msg);
 
-      // For debugging
-      RCLCPP_DEBUG(node_->get_logger(),
-                   "Commanding joint %s: position %.3f, velocity %.3f",
-                   info_.joints[i].name.c_str(), position_cmd, velocity_cmd);
+        // For debugging
+        RCLCPP_DEBUG(node_->get_logger(),
+                     "Commanding joint %s: position %.3f, velocity %.3f",
+                     info_.joints[i].name.c_str(), position_cmd, velocity_cmd);
+      }
     }
-
     return return_type::OK;
   }
 

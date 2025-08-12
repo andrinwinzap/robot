@@ -23,13 +23,18 @@ class Robot:
             )
         self.node.get_logger().set_level(log_level)
 
-        self.set_param_client = self.node.create_client(
+        self._set_motion_param_client = self.node.create_client(
             SetParameters,
             '/robot_motion_node/set_parameters'
         )
-        self.get_param_client = self.node.create_client(
+        self._get_motion_param_client = self.node.create_client(
             GetParameters,
             '/robot_motion_node/get_parameters'
+        )
+
+        self._set_hardware_param_client = self.node.create_client(
+            SetParameters,
+            '/robot_hardware_interface/set_parameters'
         )
 
         self.tool_changer = self.ToolChanger(self)
@@ -37,7 +42,20 @@ class Robot:
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
-    def _set_param(self, name: str, value):
+    def set_simulation_mode(self, value):
+        param = Parameter()
+        param.name = "simulation_mode"
+        param.value.type = ParameterType.PARAMETER_BOOL
+        param.value.bool_value = value
+        req = SetParameters.Request()
+        req.parameters = [param]
+        future = self._set_hardware_param_client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future)
+        resp = future.result()
+        if not resp.results[0].successful:
+            raise RuntimeError("Failed to set simulation mode")
+
+    def _set_motion_param(self, name: str, value):
         param = Parameter()
         param.name = name
 
@@ -66,15 +84,15 @@ class Robot:
 
         req = SetParameters.Request()
         req.parameters = [param]
-        future = self.set_param_client.call_async(req)
+        future = self._set_motion_param_client.call_async(req)
         rclpy.spin_until_future_complete(self.node, future)
         resp = future.result()
         return resp.results[0].successful
 
-    def _get_param(self, name: str):
+    def _get_motion_param(self, name: str):
         req = GetParameters.Request()
         req.names = [name]
-        future = self.get_param_client.call_async(req)
+        future = self._get_motion_param_client.call_async(req)
         rclpy.spin_until_future_complete(self.node, future)
         resp = future.result()
         if not resp or not resp.values:
@@ -111,13 +129,13 @@ class Robot:
             self.robot = robot_instance
 
         def set_tcp_position(self, position):
-            if self.robot._set_param('tcp_position', position):
+            if self.robot._set_motion_param('tcp_position', position):
                 self.robot.node.get_logger().info(f"Set tcp_position to {position}")
             else:
                 self.robot.node.get_logger().error("Failed to set tcp_position")
 
         def get_tcp_position(self):
-            return self._get_param('tcp_position')
+            return self._get_motion_param('tcp_position')
 
         def set_tcp_orientation(self, rpy):
             if len(rpy) != 3:
@@ -127,7 +145,7 @@ class Robot:
             rot = R.from_euler('xyz', rpy)
             quat = rot.as_quat()
             
-            if self.robot._set_param('tcp_orientation', quat.tolist()):
+            if self.robot._set_motion_param('tcp_orientation', quat.tolist()):
                 self.robot.node.get_logger().info(f"Set tcp_orientation quaternion to {quat.tolist()}")
                 return True
             else:
@@ -135,7 +153,7 @@ class Robot:
                 return False
 
         def get_tcp_orientation(self):
-            quat = self.robot._get_param('tcp_orientation')
+            quat = self.robot._get_motion_param('tcp_orientation')
             if quat is None or len(quat) != 4:
                 self.robot.node.get_logger().warn("tcp_orientation parameter missing or invalid length")
                 return None
@@ -149,22 +167,22 @@ class Robot:
             self.robot = robot_instance
 
         def set_num_waypoints(self, num_waypoints):
-            if self.robot._set_param('num_waypoints', num_waypoints):
+            if self.robot._set_motion_param('num_waypoints', num_waypoints):
                 self.robot.node.get_logger().info(f"Set num_waypoints to {num_waypoints}")
             else:
                 self.robot.node.get_logger().error("Failed to set num_waypoints")
 
         def get_num_waypoints(self):
-            return self.robot._get_param('num_waypoints')
+            return self.robot._get_motion_param('num_waypoints')
         
         def set_interpolation_type(self, interpolation_type):
-            if self.robot._set_param('interpolation_type', interpolation_type):
+            if self.robot._set_motion_param('interpolation_type', interpolation_type):
                 self.robot.node.get_logger().info(f"Set interpolation_type to {interpolation_type}")
             else:
                 self.robot.node.get_logger().error("Failed to set interpolation_type")
             
         def get_interpolation_type(self):
-            return self.robot._get_param('interpolation_type')
+            return self.robot._get_motion_param('interpolation_type')
         
     class JointSpace:
         def __init__(self, robot_instance):
@@ -226,13 +244,13 @@ class Robot:
                 return None
             
         def set_speed(self, speed):
-            if self.robot._set_param('joint_space_speed', speed):
+            if self.robot._set_motion_param('joint_space_speed', speed):
                 self.robot.node.get_logger().info(f"Set joint space speed to {speed}")
             else:
                 self.robot.node.get_logger().error("Failed to set joint space speed")
 
         def get_speed(self):
-            return self.robot._get_param('joint_space_speed')
+            return self.robot._get_motion_param('joint_space_speed')
             
     class CartesianSpace:
 
@@ -318,10 +336,10 @@ class Robot:
                 return None, None
             
         def set_speed(self, speed):
-            if self.robot._set_param('cartesian_space_speed', speed):
+            if self.robot._set_motion_param('cartesian_space_speed', speed):
                 self.robot.node.get_logger().info(f"Set cartesian space speed to {speed}")
             else:
                 self.robot.node.get_logger().error("Failed to set cartesian space speed")
 
         def get_speed(self):
-            return self.robot._get_param('cartesian_space_speed')
+            return self.robot._get_motion_param('cartesian_space_speed')

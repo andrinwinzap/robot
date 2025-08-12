@@ -70,6 +70,9 @@ namespace robot_hardware
     // Mutex to protect concurrent access to joint_positions_ and joint_velocities_
     std::mutex joint_state_mutex_;
 
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+    std::atomic<bool> simulation_mode_;
+
     // Thread for spinning the ROS node
     std::thread spin_thread_;
     std::atomic<bool> should_stop_;

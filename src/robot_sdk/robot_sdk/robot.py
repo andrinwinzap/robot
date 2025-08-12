@@ -129,6 +129,7 @@ class Robot:
             self.robot = robot_instance
 
         def set_tcp_position(self, position):
+            position = [float(i) for i in position]
             if self.robot._set_motion_param('tcp_position', position):
                 self.robot.node.get_logger().info(f"Set tcp_position to {position}")
             else:
@@ -138,6 +139,7 @@ class Robot:
             return self._get_motion_param('tcp_position')
 
         def set_tcp_orientation(self, rpy):
+            rpy = [float(i) for i in rpy]
             if len(rpy) != 3:
                 self.robot.node.get_logger().error("Orientation must be [roll, pitch, yaw]")
                 return False
@@ -198,6 +200,7 @@ class Robot:
                 self.robot.node.get_logger().error("Service '/robot_motion/joint_space/get_pose' not available.")
 
         def move(self, joint_positions):
+            joint_positions = [float(i) for i in joint_positions]
             goal_msg = JointSpaceMotion.Goal()
             goal_msg.joint_state = JointState()
             goal_msg.joint_state.header.stamp = self.robot.node.get_clock().now().to_msg()
@@ -244,6 +247,7 @@ class Robot:
                 return None
             
         def set_speed(self, speed):
+            speed = float(speed)
             if self.robot._set_motion_param('joint_space_speed', speed):
                 self.robot.node.get_logger().info(f"Set joint space speed to {speed}")
             else:
@@ -266,8 +270,9 @@ class Robot:
             if not self.pose_getter_client.wait_for_service(timeout_sec=5.0):
                 self.robot.node.get_logger().error("Service '/robot_motion/cartesian_space/get_pose' not available.")
 
-        def move(self, position, orientation=None):
-
+        def move(self, position, orientation=[0.0,0.0,0.0]):
+            position = [float(i) for i in position]
+            orientation = [float(i) for i in orientation]
             quat = R.from_euler('xyz', orientation).as_quat()
 
             pose_msg = PoseStamped()
@@ -336,6 +341,7 @@ class Robot:
                 return None, None
             
         def set_speed(self, speed):
+            speed = float(speed)
             if self.robot._set_motion_param('cartesian_space_speed', speed):
                 self.robot.node.get_logger().info(f"Set cartesian space speed to {speed}")
             else:

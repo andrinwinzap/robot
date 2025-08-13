@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation as R
 import rclpy
 from rclpy.node import Node
 from rclpy.logging import LoggingSeverity
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Float32
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from rclpy.action import ActionClient
@@ -14,6 +14,12 @@ from rcl_interfaces.msg import Parameter, ParameterType
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 from robot_motion.types import InterpolationType
+
+class Tool:
+    def __init__(self, robot_instance):
+        self.robot = robot_instance
+        self.tcp_position = (0.0,0.0,0.0)
+        self.tcp_orientation = (0.0, 0.0, 0.0)
 
 class Robot:
     def __init__(self, log_level=LoggingSeverity.INFO):
@@ -39,6 +45,7 @@ class Robot:
         )
 
         self.tool_changer = self.ToolChanger(self)
+        self.tools = self.Tools(self)
         self.trajectory_generator = self.TrajectoryGenerator(self)
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
@@ -154,7 +161,7 @@ class Robot:
             self.robot = robot_instance
             self._command_publisher = self.robot.node.create_publisher(Bool, '/robot/tool_changer/attach', 10)
 
-        def set_tcp_position(self, position):
+        def set_tcp_position(self, position=(0.0, 0.0, 0.0)):
             position = [float(i) for i in position]
             if self.robot._set_motion_param('tcp_position', position):
                 self.robot.node.get_logger().info(f"Set tcp_position to {position}")
@@ -164,7 +171,7 @@ class Robot:
         def get_tcp_position(self):
             return self._get_motion_param('tcp_position')
 
-        def set_tcp_orientation(self, rpy):
+        def set_tcp_orientation(self, rpy=(0.0, 0.0, 0.0)):
             rpy = [float(i) for i in rpy]
             if len(rpy) != 3:
                 self.robot.node.get_logger().error("Orientation must be [roll, pitch, yaw]")
@@ -190,17 +197,41 @@ class Robot:
             rpy = rot.as_euler('xyz', degrees=False)
             return rpy.tolist()
         
-        def attach_tool(self):
+        def attach_tool(self, tool: Tool):
             msg = Bool()
             msg.data = True
             self._command_publisher.publish(msg)
+
+            self.set_tcp_position(tool.tcp_position)
+            self.set_tcp_position(tool.tcp_orientation)
 
         def detach_tool(self):
             msg = Bool()
             msg.data = False
             self._command_publisher.publish(msg)
 
+            self.set_tcp_position()
+            self.set_tcp_position()
 
+    class Tools:
+        def __init__(self, robot_instance):
+            self.robot = robot_instance
+            self.gripper = self.Gripper(self.robot)
+
+        class Gripper(Tool):
+            def __init__(self, robot_instance):
+                super().__init__(robot_instance)  # Initialise base attributes
+                self.tcp_position = (0.0, 0.0, 0.059)
+                self.tcp_orientation = (0.0, 0.0, 0.0)
+                self._command_publisher = self.robot.node.create_publisher(
+                    Float32, '/robot/gripper/send_command', 10
+                )
+
+            def set_distance(self, pos):
+                msg = Float32()
+                msg.data = float(pos)
+                self._command_publisher.publish(msg)
+                
     class TrajectoryGenerator:
         def __init__(self, robot_instance):
             self.robot = robot_instance

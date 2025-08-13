@@ -159,6 +159,7 @@ class Robot:
     class ToolChanger:
         def __init__(self, robot_instance):
             self.robot = robot_instance
+            self.current_tool = None
             self._command_publisher = self.robot.node.create_publisher(Bool, '/robot/tool_changer/attach', 10)
 
         def set_tcp_position(self, position=(0.0, 0.0, 0.0)):
@@ -205,6 +206,8 @@ class Robot:
             self.set_tcp_position(tool.tcp_position)
             self.set_tcp_position(tool.tcp_orientation)
 
+            self.current_tool = tool
+
         def detach_tool(self):
             msg = Bool()
             msg.data = False
@@ -212,6 +215,8 @@ class Robot:
 
             self.set_tcp_position()
             self.set_tcp_position()
+
+            self.current_tool = None
 
     class Tools:
         def __init__(self, robot_instance):
@@ -228,6 +233,10 @@ class Robot:
                 )
 
             def set_distance(self, pos):
+                
+                if not self.robot.tool_changer.current_tool==self:
+                    raise RuntimeError(f" {self} not the current tool")
+                
                 msg = Float32()
                 msg.data = float(pos)
                 self._command_publisher.publish(msg)

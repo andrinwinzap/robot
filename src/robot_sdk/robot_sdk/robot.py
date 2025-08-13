@@ -5,6 +5,7 @@ from scipy.spatial.transform import Rotation as R
 import rclpy
 from rclpy.node import Node
 from rclpy.logging import LoggingSeverity
+from std_msgs.msg import Bool
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from rclpy.action import ActionClient
@@ -151,6 +152,7 @@ class Robot:
     class ToolChanger:
         def __init__(self, robot_instance):
             self.robot = robot_instance
+            self._command_publisher = self.robot.node.create_publisher(Bool, '/robot/tool_changer/attach', 10)
 
         def set_tcp_position(self, position):
             position = [float(i) for i in position]
@@ -187,6 +189,17 @@ class Robot:
             rot = R.from_quat(quat)
             rpy = rot.as_euler('xyz', degrees=False)
             return rpy.tolist()
+        
+        def attach_tool(self):
+            msg = Bool()
+            msg.data = True
+            self._command_publisher.publish(msg)
+
+        def detach_tool(self):
+            msg = Bool()
+            msg.data = False
+            self._command_publisher.publish(msg)
+
 
     class TrajectoryGenerator:
         def __init__(self, robot_instance):

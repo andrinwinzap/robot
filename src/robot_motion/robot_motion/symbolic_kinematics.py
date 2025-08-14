@@ -51,10 +51,10 @@ omega_hat_0_2 = T_02_symbolic[:3, 2]
 omega_hat_0_3 = T_03_symbolic[:3, 2]
 omega_hat_0_4 = T_04_symbolic[:3, 2]
 omega_hat_0_5 = T_05_symbolic[:3, 2]
-omega_haT_06_symbolic = T_06_symbolic[:3, 2]
+omega_hat_0_6= T_06_symbolic[:3, 2]
 
 theta_list = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
-omega_list = [omega_hat_0_1, omega_hat_0_2, omega_hat_0_3, omega_hat_0_4, omega_hat_0_5, omega_haT_06_symbolic]
+omega_list = [omega_hat_0_1, omega_hat_0_2, omega_hat_0_3, omega_hat_0_4, omega_hat_0_5, omega_hat_0_6]
 
 cols = []
 for i in range(6):

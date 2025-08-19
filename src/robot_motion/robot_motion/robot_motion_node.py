@@ -253,8 +253,7 @@ class KinematicsNode(Node):
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints, time_cartesian_space)
 
         return await self.send_trajectory(
-            start=self.current_joint_positions,
-            end=end_joints,
+            waypoints=[self.current_joint_positions, end_joints],
             goal_handle=goal_handle,
             result_type=CartesianSpaceMotion.Result,
             feedback_type=CartesianSpaceMotion.Feedback,
@@ -283,46 +282,47 @@ class KinematicsNode(Node):
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints)
 
         return await self.send_trajectory(
-            start=self.current_joint_positions,
-            end=end_joints,
+            waypoints=[self.current_joint_positions, end_joints],
             goal_handle=goal_handle,
             result_type=JointSpaceMotion.Result,
             feedback_type=JointSpaceMotion.Feedback,
             total_time=total_time
         )
 
-    def create_trajectory(self, start, end, total_time, num_points, interpolation):
+    def create_joint_trajectory(self, waypoints, total_time, num_points, interpolation):
         trajectory = JointTrajectory()
         trajectory.header.stamp = self.get_clock().now().to_msg()
         trajectory.joint_names = self.joint_names
-
-        for i in range(num_points):
-            t_norm = i / (num_points - 1)
-            pos, vel, acc = self.interpolate_joint_trajectory(
-                np.array(start),
-                np.array(end),
-                t_norm,
-                total_time,
-                interpolation
-            )
-            point = JointTrajectoryPoint()
-            point.positions = pos.tolist()
-            point.velocities = vel.tolist()
-            point.accelerations = acc.tolist()
-            point.time_from_start.sec = int(total_time * t_norm)
-            point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
-            trajectory.points.append(point)
+        for i in range(len(waypoints)-1):
+            start = waypoints[i]
+            end = waypoints[i+1]
+            for j in range(num_points):
+                t_norm = j / (num_points - 1)
+                pos, vel, acc = self.interpolate_joint_trajectory(
+                    np.array(start),
+                    np.array(end),
+                    t_norm,
+                    total_time,
+                    interpolation
+                )
+                point = JointTrajectoryPoint()
+                point.positions = pos.tolist()
+                point.velocities = vel.tolist()
+                point.accelerations = acc.tolist()
+                point.time_from_start.sec = int(total_time * t_norm)
+                point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
+                trajectory.points.append(point)
 
         # Ensure last point has zero velocity and acceleration
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
         return trajectory
 
-    async def send_trajectory(self, start, end, goal_handle, result_type, feedback_type, total_time):
+    async def send_trajectory(self, waypoints, goal_handle, result_type, feedback_type, total_time):
         num_points = self.get_parameter("num_waypoints").value
         interpolation = self.get_parameter("interpolation_type").value
 
-        trajectory = self.create_trajectory(start, end, total_time, num_points, interpolation)
+        trajectory = self.create_joint_trajectory(waypoints, total_time, num_points, interpolation)
 
         fjt_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
         if not fjt_client.wait_for_server(timeout_sec=5.0):

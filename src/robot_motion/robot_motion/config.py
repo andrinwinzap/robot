@@ -3,14 +3,14 @@ import numpy as np
 EPSILON = 1e-6
 
 LINK_LENGTHS = {
-    "L2": 200
+    "L2": 0.2
 }
 
 JOINT_OFFSETS = {
-    "D1": 182,
-    "D2": 13.5,
-    "D4": 188.5,
-    "D6": 58.13
+    "D1": 0.182,
+    "D2": 0.0135,
+    "D4": 0.1885,
+    "D6": 0.05813
 }
 
 # TODO: Get limits from urdf 

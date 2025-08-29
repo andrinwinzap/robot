@@ -33,7 +33,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 0.05000000074505806
+      Cell Size: 0.035
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
       Enabled: true
@@ -44,10 +44,10 @@ Visualization Manager:
       Normal Cell Count: 0
       Offset:
         X: 0
-        Y: 0
+        Y: 0.35
         Z: 0
       Plane: XY
-      Plane Cell Count: 25
+      Plane Cell Count: 20
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz_default_plugins/TF
@@ -57,8 +57,10 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        base_link:
+        world:
           Value: true
+        base_link:
+          Value: false
         link_1:
           Value: false
         link_2:
@@ -73,9 +75,9 @@ Visualization Manager:
           Value: false
         link_7:
           Value: false
-        tool0_tcp:
+        tool_changer:
           Value: false
-        tool1_tcp:
+        gripper_tcp:
           Value: false
       Marker Scale: 0.5
       Name: TF
@@ -91,10 +93,8 @@ Visualization Manager:
                   link_5:
                     link_6:
                       link_7:
-                        tool0_tcp:
-                          {}
-                        tool1_tcp:
-                          {}
+                        tool0_tcp: {}
+                        tool1_tcp: {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -154,11 +154,11 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        tool0_tcp:
+        tool_changer:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-        tool1_tcp:
+        gripper_tcp:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -173,7 +173,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 25; 25; 25
-    Fixed Frame: base_link
+    Fixed Frame: world
     Frame Rate: 30
   Name: root
   Tools:

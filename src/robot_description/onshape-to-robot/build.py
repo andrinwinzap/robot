@@ -1,10 +1,11 @@
+import onshape_to_robot_monkeypatch
+
 import os
 import sys
 import shutil
 import json
 import xml.etree.ElementTree as ET
 from onshape_to_robot import export
-
 
 def load_config(config_path: str) -> dict:
     with open(config_path, "r") as f:

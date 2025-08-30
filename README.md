@@ -8,5 +8,7 @@ The 3D model is available on [Onshape](https://cad.onshape.com/documents/35244f3
 
 - [Stepper Actuator Firmware](https://github.com/andrinwinzap/robot-stepper-actuator-firmware)
 - [Differential Wrist Firmware](https://github.com/andrinwinzap/robot-differential-wrist-firmware)
+- [Tool Changer Firmware](https://github.com/andrinwinzap/robot-tool-changer)
+- [Gripper Firmware](https://github.com/andrinwinzap/robot-gripper)
 - [AS5600 Library](https://github.com/andrinwinzap/as5600_espidf_component)
 - [PID Library](https://github.com/andrinwinzap/pid_espidf_component)

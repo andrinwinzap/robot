@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation as R, Slerp
 from scipy.interpolate import CubicSpline
 
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
@@ -18,6 +18,20 @@ from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 from robot_motion.kinematics import forward_kinematics, inverse_kinematics
 from robot_motion.utills import check_limits, chose_optimal_solution
 from robot_motion.types import InterpolationType
+
+def interpolate_pose(start_T, end_T, t):
+    start_p = start_T[:3, 3]
+    end_p = end_T[:3, 3]
+    interp_p = start_p * (1 - t) + end_p * t
+
+    rotations = R.from_matrix([start_T[:3, :3], end_T[:3, :3]])
+    slerp = Slerp([0, 1], rotations)
+    interp_R = slerp([t])[0].as_matrix()
+
+    T = np.eye(4)
+    T[:3, :3] = interp_R
+    T[:3, 3] = interp_p
+    return T
 
 class KinematicsNode(Node):
     def __init__(self):
@@ -222,14 +236,23 @@ class KinematicsNode(Node):
 
         end_T = self.base_to_world() @ tcp_world_T @ self.tcp_to_robot()
 
-        ik_solutions = inverse_kinematics(end_T)
-        if not ik_solutions:
-            goal_handle.abort()
-            return CartesianSpaceMotion.Result(success=False, message="No IK solution found.")
-
-        end_joints = chose_optimal_solution(self.current_joint_positions, ik_solutions)
-
         start_T = forward_kinematics(self.current_joint_positions)
+        
+        num_points = self.get_parameter("num_waypoints").value
+
+        points=[]
+
+        prev_joints = self.current_joint_positions
+        for i in range(num_points):
+            alpha = i/(num_points - 1)
+            T = interpolate_pose(start_T, end_T, alpha)
+            ik_solutions = inverse_kinematics(T)
+            if not ik_solutions:
+                goal_handle.abort()
+                return CartesianSpaceMotion.Result(success=False, message=f"No IK solution found at alpha={alpha}")
+            prev_joints = chose_optimal_solution(prev_joints, ik_solutions)
+            points.append(prev_joints)
+
         start_pos = np.array(start_T[:3, 3])
         end_pos = np.array(end_T[:3, 3])
         dist = np.linalg.norm(end_pos - start_pos)
@@ -237,7 +260,6 @@ class KinematicsNode(Node):
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value
         time_cartesian_space = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
 
-        points = np.array([np.array(self.current_joint_positions), np.array(end_joints)])
         total_time = self.compute_synchronized_time(points[0], points[-1], time_cartesian_space)
         trajectory = self.generate_trajectory(points, total_time)
 

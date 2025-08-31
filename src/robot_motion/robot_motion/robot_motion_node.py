@@ -135,43 +135,20 @@ class KinematicsNode(Node):
         pose.pose.orientation.w = quat[3]
         return pose
 
-    def interpolate_joint_trajectory(self, q0, qf, t, T, mode):
+    def interpolate_joint_trajectory(self, q0, qf, t, T):
         dq = qf - q0
         pos = np.zeros_like(q0)
         vel = np.zeros_like(q0)
         acc = np.zeros_like(q0)
         t_scaled = t * T
 
-        if mode == InterpolationType.Linear:
-            pos = q0 + dq * t
-            vel = dq / T
-            acc = np.zeros_like(q0)
-        elif mode == InterpolationType.Cubic:
-            a0 = q0
-            a1 = 0
-            a2 = 3 * dq / T**2
-            a3 = -2 * dq / T**3
-            pos = a0 + a2 * t_scaled**2 + a3 * t_scaled**3
-            vel = 2 * a2 * t_scaled + 3 * a3 * t_scaled**2
-            acc = 2 * a2 + 6 * a3 * t_scaled
-        elif mode == InterpolationType.Quintic:
-            a0 = q0
-            a1 = 0
-            a2 = 0
-            a3 = 10 * dq / T**3
-            a4 = -15 * dq / T**4
-            a5 = 6 * dq / T**5
-            t2 = t_scaled**2
-            t3 = t2 * t_scaled
-            t4 = t3 * t_scaled
-            t5 = t4 * t_scaled
-            pos = a0 + a3 * t3 + a4 * t4 + a5 * t5
-            vel = 3 * a3 * t2 + 4 * a4 * t3 + 5 * a5 * t4
-            acc = 6 * a3 * t_scaled + 12 * a4 * t2 + 20 * a5 * t3
-        else:
-            pos = q0 + dq * t
-            vel = dq / T
-            acc = np.zeros_like(q0)
+        a0 = q0
+        a1 = 0
+        a2 = 3 * dq / T**2
+        a3 = -2 * dq / T**3
+        pos = a0 + a2 * t_scaled**2 + a3 * t_scaled**3
+        vel = 2 * a2 * t_scaled + 3 * a3 * t_scaled**2
+        acc = 2 * a2 + 6 * a3 * t_scaled
 
         return pos, vel, acc
     
@@ -243,10 +220,32 @@ class KinematicsNode(Node):
 
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints, time_cartesian_space)
 
-        num_points = self.get_parameter("num_waypoints").value
-        interpolation = self.get_parameter("interpolation_type").value
+        trajectory = JointTrajectory()
+        trajectory.header.stamp = self.get_clock().now().to_msg()
+        trajectory.joint_names = self.joint_names
 
-        trajectory = self.create_joint_trajectory([self.current_joint_positions, end_joints], total_time, num_points, interpolation)
+        num_points = self.get_parameter("num_waypoints").value
+        start = np.array(self.current_joint_positions)
+        end = np.array(end_joints)
+
+        for i in range(num_points):
+                t_norm = i / (num_points - 1)
+                pos, vel, acc = self.interpolate_joint_trajectory(
+                    start,
+                    end,
+                    t_norm,
+                    total_time
+                )
+                point = JointTrajectoryPoint()
+                point.positions = pos.tolist()
+                point.velocities = vel.tolist()
+                point.accelerations = acc.tolist()
+                point.time_from_start.sec = int(total_time * t_norm)
+                point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
+                trajectory.points.append(point)
+
+        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
+        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
 
         return await self.send_trajectory(
             trajectory=trajectory,
@@ -276,33 +275,21 @@ class KinematicsNode(Node):
 
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints)
 
-        num_points = self.get_parameter("num_waypoints").value
-        interpolation = self.get_parameter("interpolation_type").value
-
-        trajectory = self.create_joint_trajectory([self.current_joint_positions, end_joints], total_time, num_points, interpolation)
-
-        return await self.send_trajectory(
-            trajectory=trajectory,
-            goal_handle=goal_handle,
-            result_type=JointSpaceMotion.Result,
-            feedback_type=JointSpaceMotion.Feedback
-        )
-
-    def create_joint_trajectory(self, waypoints, total_time, num_points, interpolation):
         trajectory = JointTrajectory()
         trajectory.header.stamp = self.get_clock().now().to_msg()
         trajectory.joint_names = self.joint_names
-        for i in range(len(waypoints)-1):
-            start = waypoints[i]
-            end = waypoints[i+1]
-            for j in range(num_points):
-                t_norm = j / (num_points - 1)
+
+        num_points = self.get_parameter("num_waypoints").value
+        start = np.array(self.current_joint_positions)
+        end = np.array(end_joints)
+
+        for i in range(num_points):
+                t_norm = i / (num_points - 1)
                 pos, vel, acc = self.interpolate_joint_trajectory(
-                    np.array(start),
-                    np.array(end),
+                    start,
+                    end,
                     t_norm,
-                    total_time,
-                    interpolation
+                    total_time
                 )
                 point = JointTrajectoryPoint()
                 point.positions = pos.tolist()
@@ -312,10 +299,15 @@ class KinematicsNode(Node):
                 point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
                 trajectory.points.append(point)
 
-        # Ensure last point has zero velocity and acceleration
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
-        return trajectory
+
+        return await self.send_trajectory(
+            trajectory=trajectory,
+            goal_handle=goal_handle,
+            result_type=JointSpaceMotion.Result,
+            feedback_type=JointSpaceMotion.Feedback
+        )
 
     async def send_trajectory(self, trajectory, goal_handle, result_type, feedback_type):
         fjt_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')

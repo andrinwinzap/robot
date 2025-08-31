@@ -45,7 +45,6 @@ class KinematicsNode(Node):
             self.joint_space_motion_callback
         )
 
-        self.declare_parameter("interpolation_type", "cubic")
         self.declare_parameter("joint_space_speed", 1.0)       # rad/s
         self.declare_parameter("cartesian_space_speed", 0.05)   # m/s
         self.declare_parameter("num_waypoints", 50)

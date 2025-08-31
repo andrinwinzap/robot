@@ -6,3 +6,4 @@ log
 .urdf
 .vscode
 __pycache__
+examples/playground.py

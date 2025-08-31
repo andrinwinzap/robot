@@ -17,21 +17,6 @@ from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
 
 from robot_motion.kinematics import forward_kinematics, inverse_kinematics
 from robot_motion.utills import check_limits, chose_optimal_solution
-from robot_motion.types import InterpolationType
-
-def interpolate_pose(start_T, end_T, t):
-    start_p = start_T[:3, 3]
-    end_p = end_T[:3, 3]
-    interp_p = start_p * (1 - t) + end_p * t
-
-    rotations = R.from_matrix([start_T[:3, :3], end_T[:3, :3]])
-    slerp = Slerp([0, 1], rotations)
-    interp_R = slerp([t])[0].as_matrix()
-
-    T = np.eye(4)
-    T[:3, :3] = interp_R
-    T[:3, 3] = interp_p
-    return T
 
 class KinematicsNode(Node):
     def __init__(self):
@@ -149,6 +134,20 @@ class KinematicsNode(Node):
         pose.pose.orientation.z = quat[2]
         pose.pose.orientation.w = quat[3]
         return pose
+
+    def interpolate_pose(self, start_T, end_T, t):
+        start_p = start_T[:3, 3]
+        end_p = end_T[:3, 3]
+        interp_p = start_p * (1 - t) + end_p * t
+
+        rotations = R.from_matrix([start_T[:3, :3], end_T[:3, :3]])
+        slerp = Slerp([0, 1], rotations)
+        interp_R = slerp([t])[0].as_matrix()
+
+        T = np.eye(4)
+        T[:3, :3] = interp_R
+        T[:3, 3] = interp_p
+        return T
 
     def generate_cubic_spline(self, points, proposed_time):
         points = np.array(points)
@@ -268,7 +267,7 @@ class KinematicsNode(Node):
         prev_joints = self.current_joint_positions
         for i in range(num_points):
             alpha = i/(num_points - 1)
-            T = interpolate_pose(start_T, end_T, alpha)
+            T = self.interpolate_pose(start_T, end_T, alpha)
             ik_solutions = inverse_kinematics(T)
             if not ik_solutions:
                 goal_handle.abort()
@@ -316,7 +315,7 @@ class KinematicsNode(Node):
         joint_space_speed = self.get_parameter("joint_space_speed").value
         dq = np.abs(np.array(self.current_joint_positions) - np.array(end_joints))
         proposed_time = np.max(dq) / joint_space_speed
-        
+
         trajectory = self.generate_trajectory(points, proposed_time)
 
         return await self.send_trajectory(

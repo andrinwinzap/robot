@@ -1,4 +1,4 @@
-from robot_sdk import Robot
+from robot_api import Robot
 import math
 from rclpy.logging import LoggingSeverity
 

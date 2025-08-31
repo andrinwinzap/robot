@@ -1,4 +1,4 @@
-# robot_sdk/robot_sdk/robot.py
+# robot_api/robot_api/robot.py
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -25,7 +25,7 @@ class Robot:
     def __init__(self, log_level=LoggingSeverity.INFO):
         rclpy.init()
         self.node = Node(
-                "robot_sdk_client",
+                "robot_api_client",
                 automatically_declare_parameters_from_overrides=True
             )
         self.node.get_logger().set_level(log_level)

@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'robot_sdk'
+package_name = 'robot_api'
 
 setup(
     name=package_name,

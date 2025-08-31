@@ -268,7 +268,7 @@ class KinematicsNode(Node):
         for i in range(num_points):
             alpha = i/(num_points - 1)
             T = self.interpolate_pose(start_T, end_T, alpha)
-            ik_solutions = inverse_kinematics(T)
+            ik_solutions = [sol for sol in inverse_kinematics(T) if check_limits(sol)]
             if not ik_solutions:
                 goal_handle.abort()
                 return CartesianSpaceMotion.Result(success=False, message=f"No IK solution found at alpha={alpha}")

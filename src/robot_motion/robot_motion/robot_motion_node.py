@@ -155,21 +155,44 @@ class KinematicsNode(Node):
         if points.shape[1] != 6:
             raise ValueError("Points must have 6 dimensions (joints).")
         
-        num_points = points.shape[0]
-        timestamps = np.linspace(0, proposed_time, num_points)
+        max_vel = np.array(self.get_parameter("joint_velocity_limits").value)
+        max_acc = np.array(self.get_parameter("joint_acceleration_limits").value)
         
-        splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
-        return splines
+        actual_time = proposed_time
+        num_samples = 1000
+        while True:
+            num_points = points.shape[0]
+            timestamps = np.linspace(0, actual_time, num_points)
+            splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
+            
+            t_sample = np.linspace(0, actual_time, num_samples)
+            max_joint_vel = 0
+            max_joint_acc = 0
+            for s in splines:
+                vel = s(t_sample, 1)
+                acc = s(t_sample, 2)
+                max_joint_vel = max(max_joint_vel, np.max(np.abs(vel)))
+                max_joint_acc = max(max_joint_acc, np.max(np.abs(acc)))
+            
+            vel_ratio = max_joint_vel / max(max_vel)
+            acc_ratio = max_joint_acc / max(max_acc)
+            scale_factor = max(vel_ratio, np.sqrt(acc_ratio), 1.0)  # at least 1
+            
+            if scale_factor <= 1.0:
+                break
+            actual_time *= scale_factor
+        
+        return splines, actual_time
 
     def generate_trajectory(self, points, proposed_time):
         trajectory = JointTrajectory()
         trajectory.header.stamp = self.get_clock().now().to_msg()
         trajectory.joint_names = self.joint_names
 
-        splines = self.generate_cubic_spline(points, proposed_time)
+        splines, actual_time = self.generate_cubic_spline(points, proposed_time)
 
         num_points = self.get_parameter("num_waypoints").value
-        times = np.linspace(0, proposed_time, num_points)
+        times = np.linspace(0, actual_time, num_points)
 
         for t in times:
             point = JointTrajectoryPoint()
@@ -260,8 +283,7 @@ class KinematicsNode(Node):
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value
         time_cartesian_space = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
 
-        total_time = self.compute_synchronized_time(points[0], points[-1], time_cartesian_space)
-        trajectory = self.generate_trajectory(points, total_time)
+        trajectory = self.generate_trajectory(points, time_cartesian_space)
 
         return await self.send_trajectory(
             trajectory=trajectory,
@@ -290,8 +312,12 @@ class KinematicsNode(Node):
             return JointSpaceMotion.Result(success=False, message="Joint limits exceeded.")
 
         points = np.array([np.array(self.current_joint_positions), np.array(end_joints)])
-        total_time = self.compute_synchronized_time(points[0], points[-1])
-        trajectory = self.generate_trajectory(points, total_time)
+
+        joint_space_speed = self.get_parameter("joint_space_speed").value
+        dq = np.abs(np.array(self.current_joint_positions) - np.array(end_joints))
+        proposed_time = np.max(dq) / joint_space_speed
+        
+        trajectory = self.generate_trajectory(points, proposed_time)
 
         return await self.send_trajectory(
             trajectory=trajectory,
@@ -337,19 +363,6 @@ class KinematicsNode(Node):
         else:
             goal_handle.abort()
             return result_type(success=False, message=f"Controller failed with error code {result.error_code}")
-
-    def compute_synchronized_time(self, start, end, time_cartesian_space=0):
-        joint_space_speed = self.get_parameter("joint_space_speed").value
-        joint_velocity_limits = np.array(self.get_parameter("joint_velocity_limits").value)  # rad/s
-        joint_acceleration_limits = np.array(self.get_parameter("joint_acceleration_limits").value)  # rad/s^2
-
-        dq = np.abs(np.array(end) - np.array(start))
-
-        time_joint_space_speed = np.max(dq) / joint_space_speed
-        time_vel_limits = np.max(dq / joint_velocity_limits)
-        time_acc_limits = np.max(2.0 * np.sqrt(dq / joint_acceleration_limits))
-
-        return max(time_cartesian_space, time_joint_space_speed, time_vel_limits, time_acc_limits)
     
 def main(args=None):
     rclpy.init(args=args)

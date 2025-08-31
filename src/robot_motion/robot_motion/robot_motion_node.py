@@ -147,22 +147,29 @@ class KinematicsNode(Node):
         splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
         return splines
 
-    def interpolate_joint_trajectory(self, q0, qf, t, T):
-        dq = qf - q0
-        pos = np.zeros_like(q0)
-        vel = np.zeros_like(q0)
-        acc = np.zeros_like(q0)
-        t_scaled = t * T
+    def generate_trajectory(self, points, proposed_time):
+        trajectory = JointTrajectory()
+        trajectory.header.stamp = self.get_clock().now().to_msg()
+        trajectory.joint_names = self.joint_names
 
-        a0 = q0
-        a1 = 0
-        a2 = 3 * dq / T**2
-        a3 = -2 * dq / T**3
-        pos = a0 + a2 * t_scaled**2 + a3 * t_scaled**3
-        vel = 2 * a2 * t_scaled + 3 * a3 * t_scaled**2
-        acc = 2 * a2 + 6 * a3 * t_scaled
+        splines = self.generate_cubic_spline(points, proposed_time)
 
-        return pos, vel, acc
+        num_points = self.get_parameter("num_waypoints").value
+        times = np.linspace(0, proposed_time, num_points)
+
+        for t in times:
+            point = JointTrajectoryPoint()
+            point.positions = [s(t, 0) for s in splines]
+            point.velocities = [s(t, 1) for s in splines]
+            point.accelerations = [s(t, 2) for s in splines]
+            point.time_from_start.sec = int(t)
+            point.time_from_start.nanosec = int((t % 1) * 1e9)
+            trajectory.points.append(point)
+
+        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
+        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+
+        return trajectory
     
     def cartesian_space_pose_getter_callback(self, request, response):
         if self.current_joint_positions is None:
@@ -230,30 +237,9 @@ class KinematicsNode(Node):
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value
         time_cartesian_space = dist / cartesian_space_speed if cartesian_space_speed > 0 else 5.0
 
-        total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints, time_cartesian_space)
-
-        trajectory = JointTrajectory()
-        trajectory.header.stamp = self.get_clock().now().to_msg()
-        trajectory.joint_names = self.joint_names
-
-        num_points = self.get_parameter("num_waypoints").value
-        start = np.array(self.current_joint_positions)
-        end = np.array(end_joints)
-
-        splines = self.generate_cubic_spline([start, end], total_time)
-        times = np.linspace(0, total_time, num_points)
-
-        for t in times:
-            point = JointTrajectoryPoint()
-            point.positions = [s(t, 0) for s in splines]
-            point.velocities = [s(t, 1) for s in splines]
-            point.accelerations = [s(t, 2) for s in splines]
-            point.time_from_start.sec = int(t)
-            point.time_from_start.nanosec = int((t % 1) * 1e9)
-            trajectory.points.append(point)
-
-        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
-        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+        points = np.array([np.array(self.current_joint_positions), np.array(end_joints)])
+        total_time = self.compute_synchronized_time(points[0], points[-1], time_cartesian_space)
+        trajectory = self.generate_trajectory(points, total_time)
 
         return await self.send_trajectory(
             trajectory=trajectory,
@@ -281,30 +267,9 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return JointSpaceMotion.Result(success=False, message="Joint limits exceeded.")
 
-        total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints)
-
-        trajectory = JointTrajectory()
-        trajectory.header.stamp = self.get_clock().now().to_msg()
-        trajectory.joint_names = self.joint_names
-
-        num_points = self.get_parameter("num_waypoints").value
-        start = np.array(self.current_joint_positions)
-        end = np.array(end_joints)
-
-        splines = self.generate_cubic_spline([start, end], total_time)
-        times = np.linspace(0, total_time, num_points)
-
-        for t in times:
-            point = JointTrajectoryPoint()
-            point.positions = [s(t, 0) for s in splines]
-            point.velocities = [s(t, 1) for s in splines]
-            point.accelerations = [s(t, 2) for s in splines]
-            point.time_from_start.sec = int(t)
-            point.time_from_start.nanosec = int((t % 1) * 1e9)
-            trajectory.points.append(point)
-
-        trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
-        trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
+        points = np.array([np.array(self.current_joint_positions), np.array(end_joints)])
+        total_time = self.compute_synchronized_time(points[0], points[-1])
+        trajectory = self.generate_trajectory(points, total_time)
 
         return await self.send_trajectory(
             trajectory=trajectory,

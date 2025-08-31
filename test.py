@@ -3,7 +3,7 @@ import math
 from rclpy.logging import LoggingSeverity
 
 robot = Robot(LoggingSeverity.DEBUG)
-robot.set_simulation_mode(True)
+robot.set_fake_hardware(True)
 robot.tool_changer._tcp_position = [0,0,0]
 robot.joint_space.speed = 0.2
 

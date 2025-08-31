@@ -183,9 +183,9 @@ class Robot:
             self.node.get_logger().error(f"Controller failed with error code {result.error_code}")
             return False
         
-    def set_simulation_mode(self, value):
+    def set_fake_hardware(self, value):
         param = Parameter()
-        param.name = "simulation_mode"
+        param.name = "fake_hardware"
         param.value.type = ParameterType.PARAMETER_BOOL
         param.value.bool_value = value
         req = SetParameters.Request()

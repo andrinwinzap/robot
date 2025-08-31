@@ -36,8 +36,8 @@ namespace robot_hardware
       // Create ROS 2 node for hardware interface
       node_ = rclcpp::Node::make_shared("robot_hardware_interface");
 
-      simulation_mode_.store(
-          node_->declare_parameter<bool>("simulation_mode", false));
+      fake_hardware_.store(
+          node_->declare_parameter<bool>("fake_hardware", false));
 
       param_callback_handle_ = node_->add_on_set_parameters_callback(
           [this](const std::vector<rclcpp::Parameter> &params)
@@ -46,12 +46,12 @@ namespace robot_hardware
             result.successful = true;
             for (const auto &p : params)
             {
-              if (p.get_name() == "simulation_mode")
+              if (p.get_name() == "fake_hardware")
               {
-                simulation_mode_.store(p.as_bool());
+                fake_hardware_.store(p.as_bool());
                 RCLCPP_INFO(node_->get_logger(),
-                            "simulation_mode changed to: %s",
-                            simulation_mode_.load() ? "true" : "false");
+                            "fake_hardware changed to: %s",
+                            fake_hardware_.load() ? "true" : "false");
               }
             }
             return result;
@@ -208,7 +208,7 @@ namespace robot_hardware
       const std::string pos_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
       const std::string vel_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
 
-      if (!simulation_mode_.load())
+      if (!fake_hardware_.load())
       {
         set_state(vel_name, joint_velocities_[i]);
         set_state(pos_name, joint_positions_[i]);
@@ -230,7 +230,7 @@ namespace robot_hardware
 
   return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
   {
-    if (!simulation_mode_.load())
+    if (!fake_hardware_.load())
     {
       // Send ros2_control joint commands (position and velocity) to micro-ROS topics
       for (size_t i = 0; i < info_.joints.size(); i++)

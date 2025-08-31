@@ -60,7 +60,7 @@ class KinematicsNode(Node):
         self.trajectory_client.wait_for_server()
         self.get_logger().info("Robot kinematics node ready.")
 
-    def get_tcp_offset_transform(self):
+    def robot_to_tcp(self):
         pos_param = list(self.get_parameter("tcp_position").value)
         quat_param = list(self.get_parameter("tcp_orientation").value)
 
@@ -85,9 +85,11 @@ class KinematicsNode(Node):
         T[:3, :3] = R.from_quat(quat).as_matrix()
         T[:3, 3] = pos
         return T
+    
+    def tcp_to_robot(self):
+        return np.linalg.inv(self.robot_to_tcp())
 
-    def get_base_transform(self):
-        # robot_position/orientation define T_wr (robot→world)
+    def world_to_base(self):
         pos = np.array(self.get_parameter("robot_position").value, float)
         quat = np.array(self.get_parameter("robot_orientation").value, float)
         quat /= np.linalg.norm(quat)
@@ -95,7 +97,10 @@ class KinematicsNode(Node):
         T[:3,:3] = R.from_quat(quat).as_matrix()
         T[:3, 3] = pos
         return T
-
+    
+    def base_to_world(self):
+        return np.linalg.inv(self.world_to_base())
+    
     def joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
         try:
@@ -179,24 +184,15 @@ class KinematicsNode(Node):
             response.pose = empty_pose
             return response
 
-        # 1) compute tool-in-base homogeneous transform
-        T_bt = forward_kinematics(self.current_joint_positions) \
-               @ self.get_tcp_offset_transform()
+        T = self.world_to_base() @ forward_kinematics(self.current_joint_positions) @ self.robot_to_tcp()
 
-        # 2) get base→world
-        T_wr = self.get_base_transform()
-
-        # 3) compute tool-in-world
-        T_wt = T_wr @ T_bt
-
-        # 4) convert to PoseStamped in "world" frame
         pose_stamped = PoseStamped()
         pose_stamped.header.stamp = self.get_clock().now().to_msg()
         pose_stamped.header.frame_id = "world"
-        pose_stamped.pose.position.x = T_wt[0, 3]
-        pose_stamped.pose.position.y = T_wt[1, 3]
-        pose_stamped.pose.position.z = T_wt[2, 3]
-        quat = R.from_matrix(T_wt[:3, :3]).as_quat()
+        pose_stamped.pose.position.x = T[0, 3]
+        pose_stamped.pose.position.y = T[1, 3]
+        pose_stamped.pose.position.z = T[2, 3]
+        quat = R.from_matrix(T[:3, :3]).as_quat()
         pose_stamped.pose.orientation.x = quat[0]
         pose_stamped.pose.orientation.y = quat[1]
         pose_stamped.pose.orientation.z = quat[2]
@@ -223,28 +219,23 @@ class KinematicsNode(Node):
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="No joint state received yet.")
 
-        world_T = self.pose_to_transform(goal.pose.pose)
-        if world_T is None:
+        tcp_world_T = self.pose_to_transform(goal.pose.pose)
+        if tcp_world_T is None:
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="Invalid target pose.")
 
-        T_wr = self.get_base_transform()
-        T_rw = np.linalg.inv(T_wr)
+        end_T = self.base_to_world() @ tcp_world_T @ self.tcp_to_robot()
 
-        end_T_robot = T_rw @ world_T
-        tcp_off_T = self.get_tcp_offset_transform()
-        end_T_tool = end_T_robot @ tcp_off_T
-
-        ik_solutions = inverse_kinematics(end_T_tool)
+        ik_solutions = inverse_kinematics(end_T)
         if not ik_solutions:
             goal_handle.abort()
             return CartesianSpaceMotion.Result(success=False, message="No IK solution found.")
 
         end_joints = chose_optimal_solution(self.current_joint_positions, ik_solutions)
 
-        start_T = forward_kinematics(self.current_joint_positions) @ self.get_tcp_offset_transform()
+        start_T = forward_kinematics(self.current_joint_positions)
         start_pos = np.array(start_T[:3, 3])
-        end_pos = np.array(end_T_tool[:3, 3])
+        end_pos = np.array(end_T[:3, 3])
         dist = np.linalg.norm(end_pos - start_pos)
 
         cartesian_space_speed = self.get_parameter("cartesian_space_speed").value

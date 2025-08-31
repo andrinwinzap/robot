@@ -243,12 +243,16 @@ class KinematicsNode(Node):
 
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints, time_cartesian_space)
 
+        num_points = self.get_parameter("num_waypoints").value
+        interpolation = self.get_parameter("interpolation_type").value
+
+        trajectory = self.create_joint_trajectory([self.current_joint_positions, end_joints], total_time, num_points, interpolation)
+
         return await self.send_trajectory(
-            waypoints=[self.current_joint_positions, end_joints],
+            trajectory=trajectory,
             goal_handle=goal_handle,
             result_type=CartesianSpaceMotion.Result,
-            feedback_type=CartesianSpaceMotion.Feedback,
-            total_time=total_time
+            feedback_type=CartesianSpaceMotion.Feedback
         )
 
     async def joint_space_motion_callback(self, goal_handle):
@@ -272,12 +276,16 @@ class KinematicsNode(Node):
 
         total_time = self.compute_synchronized_time(self.current_joint_positions, end_joints)
 
+        num_points = self.get_parameter("num_waypoints").value
+        interpolation = self.get_parameter("interpolation_type").value
+
+        trajectory = self.create_joint_trajectory([self.current_joint_positions, end_joints], total_time, num_points, interpolation)
+
         return await self.send_trajectory(
-            waypoints=[self.current_joint_positions, end_joints],
+            trajectory=trajectory,
             goal_handle=goal_handle,
             result_type=JointSpaceMotion.Result,
-            feedback_type=JointSpaceMotion.Feedback,
-            total_time=total_time
+            feedback_type=JointSpaceMotion.Feedback
         )
 
     def create_joint_trajectory(self, waypoints, total_time, num_points, interpolation):
@@ -309,12 +317,7 @@ class KinematicsNode(Node):
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
         return trajectory
 
-    async def send_trajectory(self, waypoints, goal_handle, result_type, feedback_type, total_time):
-        num_points = self.get_parameter("num_waypoints").value
-        interpolation = self.get_parameter("interpolation_type").value
-
-        trajectory = self.create_joint_trajectory(waypoints, total_time, num_points, interpolation)
-
+    async def send_trajectory(self, trajectory, goal_handle, result_type, feedback_type):
         fjt_client = ActionClient(self, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
         if not fjt_client.wait_for_server(timeout_sec=5.0):
             goal_handle.abort()

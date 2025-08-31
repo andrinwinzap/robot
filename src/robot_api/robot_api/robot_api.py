@@ -35,6 +35,7 @@ class Robot:
         self._tcp_orientation = [1.0, 0.0, 0.0, 0.0]
         self._robot_position = [0.0, 0.35, 0.0]
         self._robot_orientation = [0.0, 0.0, 0.0, 1.0]
+        self._fake_hardware = False
 
         self.trajectory_resolution = 50
         self.joint_velocity_limits = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
@@ -195,6 +196,7 @@ class Robot:
         resp = future.result()
         if not resp.results[0].successful:
             raise RuntimeError("Failed to set simulation mode")
+        self._fake_hardware = value
         
     def shutdown(self):
         self.node.destroy_node()
@@ -219,7 +221,9 @@ class Robot:
         def detach_tool(self):
             msg = Bool()
             msg.data = False
-            self._command_publisher.publish(msg)
+
+            if not self.robot._fake_hardware:
+                self._command_publisher.publish(msg)
 
             self.robot._tcp_position = (0,0,0)
             self.robot._tcp_position = (0,0,0,0)
@@ -246,7 +250,8 @@ class Robot:
                 
                 msg = Float32()
                 msg.data = float(pos)
-                self._command_publisher.publish(msg)
+                if not self.robot._fake_hardware:
+                    self._command_publisher.publish(msg)
         
     class JointSpace:
         def __init__(self, robot_instance):

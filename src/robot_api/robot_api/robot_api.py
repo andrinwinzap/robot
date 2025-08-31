@@ -6,8 +6,7 @@ import time
 from scipy.spatial.transform import Rotation as R, Slerp
 from scipy.interpolate import CubicSpline
 
-from robot_api.kinematics import forward_kinematics, inverse_kinematics
-from robot_api.utills import check_limits, chose_optimal_solution
+from robot_api.numeric_kinematics import forward_kinematics, inverse_kinematics, check_limits, chose_optimal_solution
 
 import rclpy
 from rclpy.node import Node
@@ -337,7 +336,7 @@ class Robot:
             for i in range(self.robot.trajectory_resolution):
                 alpha = i/(self.robot.trajectory_resolution - 1)
                 T = self._interpolate_pose(start_T, end_T, alpha)
-                ik_solutions = [sol for sol in inverse_kinematics(T) if check_limits(sol)]
+                ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
                     self.robot.node.get_logger().error(f"No IK solution found at alpha={alpha}")
                     return False

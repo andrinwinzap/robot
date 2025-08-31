@@ -2,8 +2,16 @@
 
 import numpy as np
 from .symbolic_kinematics import T_06_func, T_01_func, R_03_func
-from .utills import check_limits, normalize_angle
-from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS
+from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS, JOINT_LIMITS
+
+def normalize_angle(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+def check_limits(joint_angles):
+    for angle, (low, high) in zip(joint_angles, JOINT_LIMITS):
+        if not (low <= angle <= high):
+            return False
+    return True
 
 def forward_kinematics(thetas):
     return T_06_func(*thetas)
@@ -94,9 +102,9 @@ def inverse_kinematics(T_06):
 
     return T_06_solutions
 
-def verify_solutions(T_06, solutions):
-    error = []
-    for solution in solutions:
-        T_06_sol = forward_kinematics(solution)
-        error.append(np.linalg.norm(T_06_sol - T_06))
-    return error
+def chose_optimal_solution(current_joints, ik_solutions):
+    current = np.array(current_joints)
+    solutions = np.array(ik_solutions)
+    diffs = np.linalg.norm(solutions - current, axis=1)
+    best_idx = np.argmin(diffs)
+    return ik_solutions[best_idx]

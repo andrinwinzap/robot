@@ -10,6 +10,7 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from scipy.spatial.transform import Rotation as R
+from scipy.interpolate import CubicSpline
 
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
@@ -135,6 +136,17 @@ class KinematicsNode(Node):
         pose.pose.orientation.w = quat[3]
         return pose
 
+    def generate_cubic_spline(self, points, proposed_time):
+        points = np.array(points)
+        if points.shape[1] != 6:
+            raise ValueError("Points must have 6 dimensions (joints).")
+        
+        num_points = points.shape[0]
+        timestamps = np.linspace(0, proposed_time, num_points)
+        
+        splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
+        return splines
+
     def interpolate_joint_trajectory(self, q0, qf, t, T):
         dq = qf - q0
         pos = np.zeros_like(q0)
@@ -228,21 +240,17 @@ class KinematicsNode(Node):
         start = np.array(self.current_joint_positions)
         end = np.array(end_joints)
 
-        for i in range(num_points):
-                t_norm = i / (num_points - 1)
-                pos, vel, acc = self.interpolate_joint_trajectory(
-                    start,
-                    end,
-                    t_norm,
-                    total_time
-                )
-                point = JointTrajectoryPoint()
-                point.positions = pos.tolist()
-                point.velocities = vel.tolist()
-                point.accelerations = acc.tolist()
-                point.time_from_start.sec = int(total_time * t_norm)
-                point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
-                trajectory.points.append(point)
+        splines = self.generate_cubic_spline([start, end], total_time)
+        times = np.linspace(0, total_time, num_points)
+
+        for t in times:
+            point = JointTrajectoryPoint()
+            point.positions = [s(t, 0) for s in splines]
+            point.velocities = [s(t, 1) for s in splines]
+            point.accelerations = [s(t, 2) for s in splines]
+            point.time_from_start.sec = int(t)
+            point.time_from_start.nanosec = int((t % 1) * 1e9)
+            trajectory.points.append(point)
 
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)
@@ -283,21 +291,17 @@ class KinematicsNode(Node):
         start = np.array(self.current_joint_positions)
         end = np.array(end_joints)
 
-        for i in range(num_points):
-                t_norm = i / (num_points - 1)
-                pos, vel, acc = self.interpolate_joint_trajectory(
-                    start,
-                    end,
-                    t_norm,
-                    total_time
-                )
-                point = JointTrajectoryPoint()
-                point.positions = pos.tolist()
-                point.velocities = vel.tolist()
-                point.accelerations = acc.tolist()
-                point.time_from_start.sec = int(total_time * t_norm)
-                point.time_from_start.nanosec = int((total_time * t_norm % 1) * 1e9)
-                trajectory.points.append(point)
+        splines = self.generate_cubic_spline([start, end], total_time)
+        times = np.linspace(0, total_time, num_points)
+
+        for t in times:
+            point = JointTrajectoryPoint()
+            point.positions = [s(t, 0) for s in splines]
+            point.velocities = [s(t, 1) for s in splines]
+            point.accelerations = [s(t, 2) for s in splines]
+            point.time_from_start.sec = int(t)
+            point.time_from_start.nanosec = int((t % 1) * 1e9)
+            trajectory.points.append(point)
 
         trajectory.points[-1].velocities = [0.0] * len(self.joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self.joint_names)

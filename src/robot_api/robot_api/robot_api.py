@@ -20,6 +20,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from rcl_interfaces.srv import SetParameters, GetParameters
 from rcl_interfaces.msg import Parameter, ParameterType
 from builtin_interfaces.msg import Duration
+from rclpy.logging import LoggingSeverity
 
 class Tool:
     def __init__(self, robot_instance):
@@ -28,7 +29,7 @@ class Tool:
         self._tcp_orientation = (0.0, 0.0, 0.0)
 
 class Robot:
-    def __init__(self, log_level=LoggingSeverity.INFO):
+    def __init__(self):
         self._joint_names = [f"joint_{i+1}" for i in range(6)]
         self._joint_configuration = None
         self._tcp_position = [0.0, 0.0, 0.0]
@@ -47,8 +48,6 @@ class Robot:
                 "robot_api_client",
                 automatically_declare_parameters_from_overrides=True
             )
-        
-        self.node.get_logger().set_level(log_level)
 
         self.node.create_subscription(JointState, '/joint_states', self._joint_states_callback, 10)
 
@@ -197,7 +196,13 @@ class Robot:
         if not resp.results[0].successful:
             raise RuntimeError("Failed to set simulation mode")
         self._fake_hardware = value
-        
+    
+    def set_debug_mode(self, value):
+        if value:
+            self.node.get_logger().set_level(LoggingSeverity.DEBUG)
+        else:
+            self.node.get_logger().set_level(LoggingSeverity.INFO)
+            
     def shutdown(self):
         self.node.destroy_node()
         rclpy.shutdown()

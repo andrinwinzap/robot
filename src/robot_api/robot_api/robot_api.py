@@ -13,7 +13,6 @@ from rcl_interfaces.srv import SetParameters, GetParameters
 from rcl_interfaces.msg import Parameter, ParameterType
 from robot_motion_interfaces.action import CartesianSpaceMotion, JointSpaceMotion
 from robot_motion_interfaces.srv import GetCartesianSpacePose, GetJointSpacePose
-from robot_motion.types import InterpolationType
 
 class Tool:
     def __init__(self, robot_instance):
@@ -253,15 +252,6 @@ class Robot:
 
         def get_num_waypoints(self):
             return self.robot._get_motion_param('num_waypoints')
-        
-        def set_interpolation_type(self, interpolation_type):
-            if self.robot._set_motion_param('interpolation_type', interpolation_type):
-                self.robot.node.get_logger().info(f"Set interpolation_type to {interpolation_type}")
-            else:
-                self.robot.node.get_logger().error("Failed to set interpolation_type")
-            
-        def get_interpolation_type(self):
-            return self.robot._get_motion_param('interpolation_type')
         
     class JointSpace:
         def __init__(self, robot_instance):

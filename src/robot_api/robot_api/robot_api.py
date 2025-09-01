@@ -51,6 +51,8 @@ class Robot:
 
         self.node.create_subscription(JointState, '/joint_states', self._joint_states_callback, 10)
 
+        self._trajectory_client = ActionClient(self.node, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
+
         self._set_hardware_param_client = self.node.create_client(
             SetParameters,
             '/robot_hardware_interface/set_parameters'
@@ -135,9 +137,7 @@ class Robot:
         return trajectory
 
     def _send_trajectory(self, trajectory):
-        fjt_client = ActionClient(self.node, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
-
-        if not fjt_client.wait_for_server(timeout_sec=5.0):
+        if not self._trajectory_client.wait_for_server(timeout_sec=5.0):
             self.node.get_logger().error("FollowJointTrajectory server not available.")
             return False
 
@@ -159,7 +159,7 @@ class Robot:
                 self.node.get_logger().debug(f"Joint velocity error: [{formatted_vel_error}]")
 
 
-        send_goal_future = fjt_client.send_goal_async(fjt_goal, feedback_callback=feedback_callback)
+        send_goal_future = self._trajectory_client.send_goal_async(fjt_goal, feedback_callback=feedback_callback)
         rclpy.spin_until_future_complete(self.node, send_goal_future)
         goal_handle = send_goal_future.result()
 

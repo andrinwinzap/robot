@@ -352,11 +352,7 @@ class Robot:
             return T
         
         def move(self, pose: "Robot.CartesianSpace.Pose"):
-            tcp_world_T = np.eye(4)
-            tcp_world_T[:3, 3] = np.array(pose.position)
-            tcp_world_T[:3, :3] = R.from_euler('xyz', pose.orientation).as_matrix()
-
-            end_T = self._base_to_world() @ tcp_world_T @ self._tcp_to_robot()
+            end_T = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
 
             start_T = forward_kinematics(self.robot._joint_configuration)
 
@@ -386,11 +382,8 @@ class Robot:
             
             joint_space_points = [self.robot._joint_configuration]
 
-            for i, point in enumerate(trajectory):
-                tcp_world_T = np.eye(4)
-                tcp_world_T[:3, 3] = np.array(point.position)
-                tcp_world_T[:3, :3] = R.from_euler('xyz', point.orientation).as_matrix()
-                T = self._base_to_world() @ tcp_world_T @ self._tcp_to_robot()
+            for i, pose in enumerate(trajectory):
+                T = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
 
                 ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
@@ -417,6 +410,12 @@ class Robot:
                 self.position = list(position)
                 self.orientation = list(orientation)
 
+            def as_matrix(self):
+                T = np.eye(4)
+                T[:3, 3] = np.array(self.position)
+                T[:3, :3] = R.from_euler('xyz', self.orientation).as_matrix()
+                return T
+            
             def __repr__(self):
                 return f"Robot.CartesianSpace.Pose(Position={self.position}, Orientation={self.orientation})"
 

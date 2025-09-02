@@ -352,15 +352,14 @@ class Robot:
             return T
         
         def move(self, pose: "Robot.CartesianSpace.Pose"):
-            end_T = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
-
-            start_T = forward_kinematics(self.robot._joint_configuration)
+            start = forward_kinematics(self.robot._joint_configuration)
+            end = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
 
             points=[]
             prev_joints = self.robot._joint_configuration
             for i in range(self.robot.trajectory_resolution):
                 alpha = i/(self.robot.trajectory_resolution - 1)
-                T = self._interpolate_htm(start_T, end_T, alpha)
+                T = self._interpolate_htm(start, end, alpha)
                 ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
                     self.robot.node.get_logger().error(f"No IK solution found at alpha={alpha}")
@@ -368,9 +367,7 @@ class Robot:
                 prev_joints = chose_optimal_solution(prev_joints, ik_solutions)
                 points.append(prev_joints)
 
-            start_pos = np.array(start_T[:3, 3])
-            end_pos = np.array(end_T[:3, 3])
-            dist = np.linalg.norm(end_pos - start_pos)
+            dist = np.linalg.norm( np.array(end[:3, 3]) - np.array(start[:3, 3]))
 
             time_cartesian_space = dist / self.speed
 
@@ -423,8 +420,8 @@ class Robot:
             def __init__(self):
                 self.poses: List["Robot.CartesianSpace.Pose"] = []
 
-            def add_pose(self, position: Sequence[float], orientation: Sequence[float]):
-                self.poses.append(Robot.CartesianSpace.Pose(position, orientation))
+            def add_pose(self, pose: "Robot.CartesianSpace.Pose"):
+                self.poses.append(pose)
 
             def length(self):
                 return sum(

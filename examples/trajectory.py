@@ -20,7 +20,8 @@ for i in range(steps):
         center[1] + radius * math.sin(theta),
         center[2]
     ]
-    trajectory.add_pose(pos, ori)
+    pose = Robot.CartesianSpace.Pose(pos, ori)
+    trajectory.add_pose(pose)
 
 robot.cartesian_space.execute_trajectory(trajectory)
 

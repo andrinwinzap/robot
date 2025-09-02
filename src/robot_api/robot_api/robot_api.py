@@ -3,6 +3,8 @@
 import numpy as np
 import time
 
+from typing import List, Sequence
+
 from scipy.spatial.transform import Rotation as R, Slerp
 from scipy.interpolate import CubicSpline
 
@@ -263,21 +265,41 @@ class Robot:
             self.robot = robot_instance
             self.speed = 1.0
 
-        def move(self, joint_positions):
-            if not check_limits(joint_positions):
+        def move(self, point: "Robot.JointSpace.Point"):
+            if not check_limits(point.joint_configuration):
                 self.robot.node.get_logger().error(f"Joint positions not within limits")
 
-            points = np.array([np.array(self.robot._joint_configuration), np.array(joint_positions)])
+            points = np.array([np.array(self.robot._joint_configuration), np.array(point.joint_configuration)])
 
-            dq = np.abs(np.array(self.robot._joint_configuration) - np.array(joint_positions))
+            dq = np.abs(np.array(self.robot._joint_configuration) - np.array(point.joint_configuration))
             proposed_time = np.max(dq) / self.speed
 
             trajectory = self.robot._generate_trajectory(points, proposed_time)
 
             return self.robot._send_trajectory(trajectory)
 
-        def get_pose(self):
-            return self.robot._joint_configuration
+        def read(self):
+            return Robot.JointSpace.Point(self.robot._joint_configuration)
+        
+        class Point:
+            def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
+                self.joint_configuration = list(joint_configuration)
+
+            def __repr__(self):
+                return f"Robot.JointSpace.Point(Joint Configuration={self.joint_configuration})"
+
+        class Trajectory:
+            def __init__(self):
+                self.points: List["Robot.JointSpace.Point"] = []
+
+            def add_pose(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
+                self.points.append(Robot.JointSpace.Point(joint_configuration))
+
+            def __iter__(self):
+                return iter(self.points)
+
+            def __len__(self):
+                return len(self.points)
             
     class CartesianSpace:
 
@@ -315,7 +337,7 @@ class Robot:
         def _base_to_world(self):
             return np.linalg.inv(self._world_to_base())
 
-        def _interpolate_pose(self, start_T, end_T, t):
+        def _interpolate_htm(self, start_T, end_T, t):
             start_p = start_T[:3, 3]
             end_p = end_T[:3, 3]
             interp_p = start_p * (1 - t) + end_p * t
@@ -328,14 +350,11 @@ class Robot:
             T[:3, :3] = interp_R
             T[:3, 3] = interp_p
             return T
-    
-        def move(self, position, orientation=None):
-            if orientation is None:
-                orientation = [0.0, 0.0, 0.0]
-
+        
+        def move(self, pose: "Robot.CartesianSpace.Pose"):
             tcp_world_T = np.eye(4)
-            tcp_world_T[:3, 3] = np.array(position)
-            tcp_world_T[:3, :3] = R.from_euler('xyz', orientation).as_matrix()
+            tcp_world_T[:3, 3] = np.array(pose.position)
+            tcp_world_T[:3, :3] = R.from_euler('xyz', pose.orientation).as_matrix()
 
             end_T = self._base_to_world() @ tcp_world_T @ self._tcp_to_robot()
 
@@ -345,7 +364,7 @@ class Robot:
             prev_joints = self.robot._joint_configuration
             for i in range(self.robot.trajectory_resolution):
                 alpha = i/(self.robot.trajectory_resolution - 1)
-                T = self._interpolate_pose(start_T, end_T, alpha)
+                T = self._interpolate_htm(start_T, end_T, alpha)
                 ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
                     self.robot.node.get_logger().error(f"No IK solution found at alpha={alpha}")
@@ -362,9 +381,60 @@ class Robot:
             trajectory = self.robot._generate_trajectory(points, time_cartesian_space)
 
             return self.robot._send_trajectory(trajectory)
+        
+        def execute_trajectory(self, trajectory: "Robot.CartesianSpace.Trajectory"):
+            
+            joint_space_points = [self.robot._joint_configuration]
 
-        def get_pose(self):
+            for i, point in enumerate(trajectory):
+                tcp_world_T = np.eye(4)
+                tcp_world_T[:3, 3] = np.array(point.position)
+                tcp_world_T[:3, :3] = R.from_euler('xyz', point.orientation).as_matrix()
+                T = self._base_to_world() @ tcp_world_T @ self._tcp_to_robot()
+
+                ik_solutions = inverse_kinematics(T)
+                if not ik_solutions:
+                    self.robot.node.get_logger().error(f"No IK solution found at pose {i}")
+                    return False
+                joint_space_points.append(chose_optimal_solution(joint_space_points[-1], ik_solutions))
+
+            proposed_time = trajectory.length() / self.speed
+
+            trajectory = self.robot._generate_trajectory(joint_space_points, proposed_time)
+
+            return self.robot._send_trajectory(trajectory)
+                
+        def read(self):
             T = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
-            position = T[:3, 3]
-            orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
-            return position, orientation
+            pose = Robot.CartesianSpace.Pose(
+                position=T[:3, 3],
+                orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
+                )
+            return pose
+        
+        class Pose:
+            def __init__(self, position: Sequence[float]= (0.0, 0.0, 0.0), orientation: Sequence[float]= (0.0, 0.0, 0.0)):
+                self.position = list(position)
+                self.orientation = list(orientation)
+
+            def __repr__(self):
+                return f"Robot.CartesianSpace.Pose(Position={self.position}, Orientation={self.orientation})"
+
+        class Trajectory:
+            def __init__(self):
+                self.poses: List["Robot.CartesianSpace.Pose"] = []
+
+            def add_pose(self, position: Sequence[float], orientation: Sequence[float]):
+                self.poses.append(Robot.CartesianSpace.Pose(position, orientation))
+
+            def length(self):
+                return sum(
+                    np.linalg.norm(np.array(p2.position) - np.array(p1.position))
+                    for p1, p2 in zip(self.poses[:-1], self.poses[1:])
+                )
+
+            def __iter__(self):
+                return iter(self.poses)
+
+            def __len__(self):
+                return len(self.poses)

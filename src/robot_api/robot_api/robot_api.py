@@ -78,8 +78,8 @@ class Robot:
             self.node.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
 
-    def _generate_cubic_spline(self, points, proposed_time):
-        points = np.array(points)
+    def _generate_cubic_spline(self, path: "Robot.JointSpace.Path", proposed_time):
+        points = np.array(path)
         if points.shape[1] != 6:
             raise ValueError("Points must have 6 dimensions (joints).")
         
@@ -109,13 +109,13 @@ class Robot:
         
         return splines, actual_time
 
-    def _generate_trajectory(self, points, proposed_time):
+    def _generate_trajectory(self, path: "Robot.JointSpace.Path", proposed_time):
         trajectory = JointTrajectory()
         trajectory.header.stamp = (self.node.get_clock().now() +
                                 rclpy.duration.Duration(seconds=0.1)).to_msg()  # small delay
         trajectory._joint_names = self._joint_names
 
-        splines, actual_time = self._generate_cubic_spline(points, proposed_time)
+        splines, actual_time = self._generate_cubic_spline(path, proposed_time)
 
         num_points = self.trajectory_resolution
         times = np.linspace(0, actual_time, num_points)
@@ -287,19 +287,27 @@ class Robot:
 
             def __repr__(self):
                 return f"Robot.JointSpace.Point(Joint Configuration={self.joint_configuration})"
+            
+            def __array__(self, dtype=None):
+                return np.array(self.joint_configuration, dtype=dtype)
 
-        class Trajectory:
+        class Path:
             def __init__(self):
                 self.points: List["Robot.JointSpace.Point"] = []
 
-            def add_pose(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
-                self.points.append(Robot.JointSpace.Point(joint_configuration))
+            def add(self, point: "Robot.JointSpace.Point"):
+                self.points.append(point)
 
             def __iter__(self):
                 return iter(self.points)
 
             def __len__(self):
                 return len(self.points)
+            
+            def __array__(self, dtype=None):
+                if not self.points:
+                    return np.empty((0, 6), dtype=dtype)
+                return np.array([np.array(p, dtype=dtype) for p in self.points], dtype=dtype)
             
     class CartesianSpace:
 
@@ -355,31 +363,35 @@ class Robot:
             start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
             end = pose.as_matrix()
 
-            trajectory = Robot.CartesianSpace.Trajectory()
+            path = Robot.CartesianSpace.Path()
             for i in range(self.robot.trajectory_resolution):
                 alpha = i / (self.robot.trajectory_resolution - 1)
                 T = self._interpolate_htm(start, end, alpha)
                 pose = Robot.CartesianSpace.Pose.from_matrix(T)
-                trajectory.add_pose(pose)
+                path.add(pose)
 
-            return self.execute_trajectory(trajectory)
+            return self.follow_path(path)
         
-        def execute_trajectory(self, trajectory: "Robot.CartesianSpace.Trajectory"):
+        def follow_path(self, path: "Robot.CartesianSpace.Path"):
             
-            joint_space_points = [self.robot._joint_configuration]
+            joint_space_path = Robot.JointSpace.Path()
 
-            for i, pose in enumerate(trajectory):
+            start = Robot.JointSpace.Point(self.robot._joint_configuration)
+            joint_space_path.add(start)
+
+            for i, pose in enumerate(path):
                 T = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
 
                 ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
                     self.robot.node.get_logger().error(f"No IK solution found at pose {i}")
                     return False
-                joint_space_points.append(chose_optimal_solution(joint_space_points[-1], ik_solutions))
+                point = Robot.JointSpace.Point(chose_optimal_solution(np.array(joint_space_path.points[-1]), ik_solutions))
+                joint_space_path.add(point)
 
-            proposed_time = trajectory.length() / self.speed
+            proposed_time = path.length() / self.speed
 
-            trajectory = self.robot._generate_trajectory(joint_space_points, proposed_time)
+            trajectory = self.robot._generate_trajectory(joint_space_path, proposed_time)
 
             return self.robot._send_trajectory(trajectory)
                 
@@ -413,11 +425,11 @@ class Robot:
             def __repr__(self):
                 return f"Robot.CartesianSpace.Pose(Position={self.position}, Orientation={self.orientation})"
 
-        class Trajectory:
+        class Path:
             def __init__(self):
                 self.poses: List["Robot.CartesianSpace.Pose"] = []
 
-            def add_pose(self, pose: "Robot.CartesianSpace.Pose"):
+            def add(self, pose: "Robot.CartesianSpace.Pose"):
                 self.poses.append(pose)
 
             def length(self):

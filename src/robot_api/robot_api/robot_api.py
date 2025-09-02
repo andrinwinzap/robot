@@ -352,28 +352,17 @@ class Robot:
             return T
         
         def move(self, pose: "Robot.CartesianSpace.Pose"):
-            start = forward_kinematics(self.robot._joint_configuration)
-            end = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
+            start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
+            end = pose.as_matrix()
 
-            points=[]
-            prev_joints = self.robot._joint_configuration
+            trajectory = Robot.CartesianSpace.Trajectory()
             for i in range(self.robot.trajectory_resolution):
-                alpha = i/(self.robot.trajectory_resolution - 1)
+                alpha = i / (self.robot.trajectory_resolution - 1)
                 T = self._interpolate_htm(start, end, alpha)
-                ik_solutions = inverse_kinematics(T)
-                if not ik_solutions:
-                    self.robot.node.get_logger().error(f"No IK solution found at alpha={alpha}")
-                    return False
-                prev_joints = chose_optimal_solution(prev_joints, ik_solutions)
-                points.append(prev_joints)
+                pose = Robot.CartesianSpace.Pose.from_matrix(T)
+                trajectory.add_pose(pose)
 
-            dist = np.linalg.norm( np.array(end[:3, 3]) - np.array(start[:3, 3]))
-
-            time_cartesian_space = dist / self.speed
-
-            trajectory = self.robot._generate_trajectory(points, time_cartesian_space)
-
-            return self.robot._send_trajectory(trajectory)
+            return self.execute_trajectory(trajectory)
         
         def execute_trajectory(self, trajectory: "Robot.CartesianSpace.Trajectory"):
             
@@ -412,6 +401,14 @@ class Robot:
                 T[:3, 3] = np.array(self.position)
                 T[:3, :3] = R.from_euler('xyz', self.orientation).as_matrix()
                 return T
+            
+            @classmethod
+            def from_matrix(cls, T: np.ndarray) -> "Robot.CartesianSpace.Pose":
+                if T.shape != (4, 4):
+                    raise ValueError("Input must be a 4x4 homogeneous transform")
+                position = T[:3, 3]
+                orientation = R.from_matrix(T[:3, :3]).as_euler('xyz')
+                return cls(position, orientation)
             
             def __repr__(self):
                 return f"Robot.CartesianSpace.Pose(Position={self.position}, Orientation={self.orientation})"

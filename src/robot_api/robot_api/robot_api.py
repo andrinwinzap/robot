@@ -286,7 +286,12 @@ class Robot:
                 self.joint_configuration = list(joint_configuration)
 
             def __repr__(self):
-                return f"Robot.JointSpace.Point(Joint Configuration={self.joint_configuration})"
+                subscripts = "₁₂₃₄₅₆"
+                joints_str = ", ".join(
+                    f"θ{subscripts[i]}" + f"={val:.5f}"
+                    for i, val in enumerate(self.joint_configuration)
+                )
+                return f"Robot.JointSpace.Point({joints_str})"
             
             def __array__(self, dtype=None):
                 return np.array(self.joint_configuration, dtype=dtype)
@@ -437,7 +442,7 @@ class Robot:
                 return cls(position, orientation)
             
             def __repr__(self):
-                return f"Robot.CartesianSpace.Pose(Position={self.position}, Orientation={self.orientation})"
+                return f"Robot.CartesianSpace.Pose(X={self.position[0]}, Y={self.position[0]}, Z={self.position[0]} | Roll={self.orientation[0]}, Pitch={self.orientation[1]}, Yaw={self.orientation[2]})"
 
         class Path:
             def __init__(self):

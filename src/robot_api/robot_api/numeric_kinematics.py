@@ -1,46 +1,44 @@
-# robot_motion.py
+# kinematics.py
 
 import numpy as np
 from .symbolic_kinematics import T_06_func, T_01_func, R_03_func
-from .utills import check_limits, normalize_angle
-from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS
+from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS, JOINT_LIMITS
+
+def normalize_angle(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+def check_limits(joint_angles):
+    for angle, (low, high) in zip(joint_angles, JOINT_LIMITS):
+        if not (low <= angle <= high):
+            return False
+    return True
 
 def forward_kinematics(thetas):
     return T_06_func(*thetas)
 
 def inverse_kinematics(T_06):
+
     R_06 = T_06[:3, :3] # Extract rotation part
     P_06 = T_06[:3, 3] # Extract position part
 
     P_04 = P_06 - JOINT_OFFSETS["D6"] * R_06[:, 2] # Derive wrist center position
 
     # Calculate q1
-    planar_dist = np.hypot(P_04[0], P_04[1])
-    phi = np.arcsin(np.clip(JOINT_OFFSETS["D2"] / planar_dist, -1.0, 1.0))
-    theta = np.arctan2(P_04[1], P_04[0])
-    q1 = [theta - phi, theta + (np.pi + phi)]
-
+    phi = np.arctan2(JOINT_OFFSETS["D2"], np.sqrt(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2))
+    theta_1 = np.arctan2(P_04[1], P_04[0])
+    q1 = [theta_1 - phi, theta_1 + (np.pi + phi)]
+    
     # Calculate q3
-    T_01 = T_01_func(q1[0])
-    P_04_projected = P_04 - JOINT_OFFSETS["D2"] * T_01[:3, 2]
+    r = np.sqrt(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2)
+    s = P_04[2] - JOINT_OFFSETS["D1"]
 
-    r = np.sqrt(P_04_projected[0]**2 + P_04_projected[1]**2)
-    s = P_04_projected[2] - JOINT_OFFSETS["D1"]
-    D = np.sqrt(r**2 + s**2)
+    theta_cos = (r**2 + s**2 - LINK_LENGTHS["L2"]**2 - JOINT_OFFSETS["D4"]**2) / (2 * LINK_LENGTHS["L2"] * JOINT_OFFSETS["D4"])
 
-    theta_cos = (D**2 - LINK_LENGTHS["L2"]**2 - JOINT_OFFSETS["D4"]**2) / (2 * LINK_LENGTHS["L2"] * JOINT_OFFSETS["D4"])
+    q3 = [np.arctan2(np.sqrt(1-theta_cos**2), theta_cos), np.arctan2(-np.sqrt(1-theta_cos**2), theta_cos)]
 
-    if theta_cos < -1 - EPSILON or theta_cos > 1 + EPSILON:
-        return None
-
-    theta_cos = np.clip(theta_cos, -1.0, 1.0)
-    theta = np.arccos(theta_cos)
-    q3 = [theta, -theta]
-
-     # Calculate q2
-    theta = np.arctan2(JOINT_OFFSETS["D4"] * np.sin(q3[0]), LINK_LENGTHS["L2"] + JOINT_OFFSETS["D4"] * np.cos(q3[0]))
-    theta_D = (np.pi/2 - np.arctan2(s, r))
-    q2 = [theta_D - theta, theta_D + theta]
+    alpha = np.arctan2(r, s)
+    beta = np.arctan2(JOINT_OFFSETS["D4"] * np.sin(q3[0]), LINK_LENGTHS["L2"] + (np.cos(q3[0]) * JOINT_OFFSETS["D4"]))
+    q2 = [alpha - beta, alpha + beta]
 
     T_03_solutions = zip(
     [ q1[0],     q1[0],     q1[1],     q1[1] ],
@@ -51,6 +49,7 @@ def inverse_kinematics(T_06):
     T_06_solutions = []
 
     for q1, q2, q3 in T_03_solutions:
+
         # Calculate wrist rotation matrix
         R_03 = R_03_func(q1,q2,q3)
         R_36 = R_03.T @ R_06
@@ -94,9 +93,9 @@ def inverse_kinematics(T_06):
 
     return T_06_solutions
 
-def verify_solutions(T_06, solutions):
-    error = []
-    for solution in solutions:
-        T_06_sol = forward_kinematics(solution)
-        error.append(np.linalg.norm(T_06_sol - T_06))
-    return error
+def chose_optimal_solution(current_joints, ik_solutions):
+    current = np.array(current_joints)
+    solutions = np.array(ik_solutions)
+    diffs = np.linalg.norm(solutions - current, axis=1)
+    best_idx = np.argmin(diffs)
+    return ik_solutions[best_idx]

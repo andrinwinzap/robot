@@ -53,12 +53,6 @@ def generate_launch_description():
         arguments=["joint_trajectory_controller"],
     )
 
-    robot_motion_node = Node(
-        package="robot_motion",
-        executable="robot_motion_node",
-        output="both",
-    )
-
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -89,7 +83,6 @@ def generate_launch_description():
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         joint_trajectory_controller_spawner,
-        robot_motion_node,
         rviz_node,
         *microros_agents
     ])

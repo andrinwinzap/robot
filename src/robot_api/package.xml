@@ -1,15 +1,12 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>robot_motion</name>
+  <name>robot_api</name>
   <version>0.0.0</version>
-  <description>Analytical kinematics for a 6dof robot arm</description>
+  <description>Python library to control a 6dof robot arm</description>
   <maintainer email="AndrinWinzap@proton.me">andrin</maintainer>
   <license>MIT</license>
 
-  <build_depend>robot_motion_interfaces</build_depend>
-  
-  <exec_depend>robot_motion_interfaces</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

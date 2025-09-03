@@ -23,6 +23,7 @@ for i in range(steps):
     pose = Robot.CartesianSpace.Pose(pos, ori)
     path.add(pose)
 
+robot.cartesian_space.move(path.poses[0])
 robot.cartesian_space.follow_path(path)
 
 robot.shutdown()

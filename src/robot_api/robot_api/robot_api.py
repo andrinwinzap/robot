@@ -376,9 +376,7 @@ class Robot:
             
             joint_space_path = Robot.JointSpace.Path()
 
-            start = Robot.JointSpace.Point(self.robot._joint_configuration)
-            joint_space_path.add(start)
-
+            prev_joint_configuration = self.robot._joint_configuration
             for i, pose in enumerate(path):
                 T = self._base_to_world() @ pose.as_matrix() @ self._tcp_to_robot()
 
@@ -386,9 +384,16 @@ class Robot:
                 if not ik_solutions:
                     self.robot.node.get_logger().error(f"No IK solution found at pose {i}")
                     return False
-                point = Robot.JointSpace.Point(chose_optimal_solution(np.array(joint_space_path.points[-1]), ik_solutions))
+                prev_joint_configuration = chose_optimal_solution(prev_joint_configuration, ik_solutions)
+                point = Robot.JointSpace.Point(prev_joint_configuration)
                 joint_space_path.add(point)
 
+            offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
+
+            if  offset > 1e-4:
+                self.robot.node.get_logger().error("Robot not at start of path")
+                return False
+            
             proposed_time = path.length() / self.speed
 
             trajectory = self.robot._generate_trajectory(joint_space_path, proposed_time)

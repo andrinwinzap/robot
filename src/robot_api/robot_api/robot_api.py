@@ -359,16 +359,23 @@ class Robot:
             T[:3, 3] = interp_p
             return T
         
-        def move(self, pose: "Robot.CartesianSpace.Pose"):
+        def move(self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True):
             start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
             end = pose.as_matrix()
 
             path = Robot.CartesianSpace.Path()
-            for i in range(self.robot.trajectory_resolution):
-                alpha = i / (self.robot.trajectory_resolution - 1)
-                T = self._interpolate_htm(start, end, alpha)
-                pose = Robot.CartesianSpace.Pose.from_matrix(T)
-                path.add(pose)
+
+            if enforce_linearity:
+                for i in range(self.robot.trajectory_resolution):
+                    alpha = i / (self.robot.trajectory_resolution - 1)
+                    T = self._interpolate_htm(start, end, alpha)
+                    pose = Robot.CartesianSpace.Pose.from_matrix(T)
+                    path.add(pose)
+            else:
+               start_pose = Robot.CartesianSpace.Pose.from_matrix(start)
+               end_pose = pose
+               path.add(start_pose)
+               path.add(end_pose)
 
             return self.follow_path(path)
         

@@ -14,12 +14,12 @@ pose = Robot.CartesianSpace.Pose()
 pose.position = (0.0,0.1,0.0)
 pose.orientation = (0, 0.0,0.0)
 
-robot.cartesian_space.move(pose)
+robot.cartesian_space.move(pose, False)
 
 pose.position = (0.0,0,0)
 pose.orientation = (0, 0.0,0.0)
 
-robot.cartesian_space.move(pose)
+robot.cartesian_space.move(pose, False)
 
 print(robot.joint_space.read())
 print(robot.cartesian_space.read())

@@ -41,8 +41,8 @@ class Robot:
         self._fake_hardware = False
 
         self.trajectory_resolution = 50
-        self.joint_velocity_limits = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
-        self.joint_acceleration_limits = [3.14, 3.14, 3.14, 3.14, 3.14, 3.14]
+        self.joint_velocity_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
+        self.joint_acceleration_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
         
         rclpy.init()
 
@@ -402,7 +402,7 @@ class Robot:
 
             offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
 
-            if  offset > 1e-4:
+            if  offset > 1e-3:
                 self.robot.node.get_logger().error("Robot not at start of path")
                 return False
             

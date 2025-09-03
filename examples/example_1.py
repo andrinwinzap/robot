@@ -4,7 +4,7 @@ import math
 robot = Robot()
 robot.set_fake_hardware(True)
 
-point = Robot.JointSpace.Point([-1.60938022, 1.6191366,   0.60254534,  0.0, 0.91991071,  1.53221243])
+point = Robot.JointSpace.Point([0.0, 0.0,   0.0,  0.0, 0.0,  0.0])
 
 robot.joint_space.move(point)
 
@@ -19,7 +19,7 @@ robot.cartesian_space.move(pose, False)
 pose.position = (0.0,0,0)
 pose.orientation = (0, 0.0,0.0)
 
-robot.cartesian_space.move(pose, False)
+robot.cartesian_space.move(pose)
 
 print(robot.joint_space.read())
 print(robot.cartesian_space.read())

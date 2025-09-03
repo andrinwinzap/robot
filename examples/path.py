@@ -10,7 +10,7 @@ path = Robot.CartesianSpace.Path()
 ori = [0,0,0]
 
 center = [0, 0.1, 0]  # circle center (x, y, z)
-radius = 0.02         # circle radius
+radius = 0.05         # circle radius
 steps = 50            # number of path points
 
 for i in range(steps):
@@ -24,6 +24,9 @@ for i in range(steps):
     path.add(pose)
 
 robot.cartesian_space.move(path.poses[0], False)
+
+print(path.poses[-1])
+
 robot.cartesian_space.follow_path(path)
 
 robot.shutdown()

@@ -279,7 +279,8 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
 
         def read(self):
-            return Robot.JointSpace.Point(np.round(self.robot._joint_configuration, 5))
+            joint_configuration = np.round(self._joint_configuration, 5)
+            return Robot.JointSpace.Point(joint_configuration)
         
         class Point:
             def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
@@ -414,8 +415,8 @@ class Robot:
                 
         def read(self):
             T = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
-            position= np.round(T[:3, 3], 5)
-            orientation = np.round(R.from_matrix(T[:3, :3]).as_euler("xyz"), 5)
+            position= T[:3, 3]
+            orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
             pose = Robot.CartesianSpace.Pose(
                 position,
                 orientation
@@ -442,7 +443,9 @@ class Robot:
                 return cls(position, orientation)
             
             def __repr__(self):
-                return f"Robot.CartesianSpace.Pose(X={self.position[0]}, Y={self.position[0]}, Z={self.position[0]} | Roll={self.orientation[0]}, Pitch={self.orientation[1]}, Yaw={self.orientation[2]})"
+                position = np.round(self.position, 5)
+                orientation = np.round(self.orientation, 5)
+                return f"Robot.CartesianSpace.Pose(X={position[0]}, Y={position[1]}, Z={position[2]} | Roll={orientation[0]}, Pitch={orientation[1]}, Yaw={orientation[2]})"
 
         class Path:
             def __init__(self):

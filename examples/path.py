@@ -14,7 +14,7 @@ radius = 0.05         # circle radius
 steps = 50            # number of path points
 
 for i in range(steps):
-    theta = 2 * math.pi * i / steps
+    theta = 2 * math.pi * i / (steps-1)
     pos = [
         center[0] + radius * math.cos(theta),
         center[1] + radius * math.sin(theta),
@@ -24,8 +24,6 @@ for i in range(steps):
     path.add(pose)
 
 robot.cartesian_space.move(path.poses[0], False)
-
-print(path.poses[-1])
 
 robot.cartesian_space.follow_path(path)
 

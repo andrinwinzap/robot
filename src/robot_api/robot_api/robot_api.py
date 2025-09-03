@@ -279,7 +279,7 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
 
         def read(self):
-            return Robot.JointSpace.Point(self.robot._joint_configuration)
+            return Robot.JointSpace.Point(np.round(self.robot._joint_configuration, 5))
         
         class Point:
             def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
@@ -397,9 +397,11 @@ class Robot:
                 
         def read(self):
             T = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
+            position= np.round(T[:3, 3], 5)
+            orientation = np.round(R.from_matrix(T[:3, :3]).as_euler("xyz"), 5)
             pose = Robot.CartesianSpace.Pose(
-                position=T[:3, 3],
-                orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
+                position,
+                orientation
                 )
             return pose
         

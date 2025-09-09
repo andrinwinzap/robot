@@ -279,7 +279,7 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
 
         def read(self):
-            joint_configuration = np.round(self._joint_configuration, 5)
+            joint_configuration = np.round(self.robot._joint_configuration, 5)
             return Robot.JointSpace.Point(joint_configuration)
         
         class Point:

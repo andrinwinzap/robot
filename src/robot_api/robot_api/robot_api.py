@@ -65,10 +65,10 @@ class Robot:
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
-        self.node.get_logger().info("Waiting for first joint state...")
+        self.node.get_logger().debug("Waiting for first joint state...")
         while self._joint_configuration is None:
             rclpy.spin_once(self.node, timeout_sec=0.1)
-        self.node.get_logger().info("First joint state received, robot ready.")
+        self.node.get_logger().debug("First joint state received, robot ready.")
 
     def _joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -169,7 +169,7 @@ class Robot:
             self.node.get_logger().error("Trajectory rejected by controller.")
             return False
 
-        self.node.get_logger().info("Trajectory accepted by controller.")
+        self.node.get_logger().debug("Trajectory accepted by controller.")
 
         # Wait for result while still spinning
         result_future = goal_handle.get_result_async()
@@ -179,7 +179,7 @@ class Robot:
         result = result_future.result().result
 
         if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
-            self.node.get_logger().info("Trajectory completed successfully.")
+            self.node.get_logger().debug("Trajectory completed successfully.")
             return True
         else:
             self.node.get_logger().error(f"Controller failed with error code {result.error_code}")

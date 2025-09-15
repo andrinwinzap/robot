@@ -41,8 +41,8 @@ class Robot:
         self._fake_hardware = False
 
         self.trajectory_resolution = 50
-        self.joint_velocity_limits = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
-        self.joint_acceleration_limits = [3.14, 3.14, 3.14, 3.14, 3.14, 3.14]
+        self.joint_velocity_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
+        self.joint_acceleration_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
         
         rclpy.init()
 
@@ -65,10 +65,10 @@ class Robot:
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
-        self.node.get_logger().info("Waiting for first joint state...")
+        self.node.get_logger().debug("Waiting for first joint state...")
         while self._joint_configuration is None:
             rclpy.spin_once(self.node, timeout_sec=0.1)
-        self.node.get_logger().info("First joint state received, robot ready.")
+        self.node.get_logger().debug("First joint state received, robot ready.")
 
     def _joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -169,7 +169,7 @@ class Robot:
             self.node.get_logger().error("Trajectory rejected by controller.")
             return False
 
-        self.node.get_logger().info("Trajectory accepted by controller.")
+        self.node.get_logger().debug("Trajectory accepted by controller.")
 
         # Wait for result while still spinning
         result_future = goal_handle.get_result_async()
@@ -179,7 +179,7 @@ class Robot:
         result = result_future.result().result
 
         if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
-            self.node.get_logger().info("Trajectory completed successfully.")
+            self.node.get_logger().debug("Trajectory completed successfully.")
             return True
         else:
             self.node.get_logger().error(f"Controller failed with error code {result.error_code}")
@@ -279,7 +279,8 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
 
         def read(self):
-            return Robot.JointSpace.Point(np.round(self.robot._joint_configuration, 5))
+            joint_configuration = np.round(self.robot._joint_configuration, 5)
+            return Robot.JointSpace.Point(joint_configuration)
         
         class Point:
             def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
@@ -287,11 +288,11 @@ class Robot:
 
             def __repr__(self):
                 subscripts = "₁₂₃₄₅₆"
-                joints_str = ", ".join(
-                    f"θ{subscripts[i]}" + f"={val:.5f}"
+                joints = [
+                    f"θ{subscripts[i]} = {val: .5f}"
                     for i, val in enumerate(self.joint_configuration)
-                )
-                return f"Robot.JointSpace.Point({joints_str})"
+                ]
+                return "Robot.JointSpace.Point(\n  " + "\n  ".join(joints) + "\n)"
             
             def __array__(self, dtype=None):
                 return np.array(self.joint_configuration, dtype=dtype)
@@ -402,7 +403,7 @@ class Robot:
 
             offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
 
-            if  offset > 1e-4:
+            if  offset > 1e-3:
                 self.robot.node.get_logger().error("Robot not at start of path")
                 return False
             
@@ -414,8 +415,8 @@ class Robot:
                 
         def read(self):
             T = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
-            position= np.round(T[:3, 3], 5)
-            orientation = np.round(R.from_matrix(T[:3, :3]).as_euler("xyz"), 5)
+            position= T[:3, 3]
+            orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
             pose = Robot.CartesianSpace.Pose(
                 position,
                 orientation
@@ -442,7 +443,14 @@ class Robot:
                 return cls(position, orientation)
             
             def __repr__(self):
-                return f"Robot.CartesianSpace.Pose(X={self.position[0]}, Y={self.position[0]}, Z={self.position[0]} | Roll={self.orientation[0]}, Pitch={self.orientation[1]}, Yaw={self.orientation[2]})"
+                position = np.round(self.position, 5)
+                orientation = np.round(self.orientation, 5)
+                return (
+                    f"Robot.CartesianSpace.Pose(\n"
+                    f"  Position:    X={position[0]}, Y={position[1]}, Z={position[2]}\n"
+                    f"  Orientation: Roll={orientation[0]}, Pitch={orientation[1]}, Yaw={orientation[2]}\n"
+                    f")"
+                )
 
         class Path:
             def __init__(self):

@@ -2,14 +2,14 @@ from robot_api import Robot
 import math
 
 robot = Robot()
-robot.set_fake_hardware(True)
+robot.set_fake_hardware(False)
 
 #robot.joint_space.move([-1.60938022, 1.6191366,   0.60254534,  0.0, 0.91991071,  1.53221243])
 
 path = Robot.CartesianSpace.Path()
 ori = [0,0,0]
 
-center = [0, 0.1, 0]  # circle center (x, y, z)
+center = [0, 0.1, 0.1]  # circle center (x, y, z)
 radius = 0.05         # circle radius
 steps = 50            # number of path points
 

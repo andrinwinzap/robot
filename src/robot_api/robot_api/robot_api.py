@@ -28,16 +28,16 @@ class Tool:
     def __init__(self, robot_instance):
         self.robot = robot_instance
         self._tcp_position = (0.0,0.0,0.0)
-        self._tcp_orientation = (0.0, 0.0, 0.0)
+        self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
 
 class Robot:
     def __init__(self):
         self._joint_names = [f"joint_{i+1}" for i in range(6)]
         self._joint_configuration = None
-        self._tcp_position = [0.0, 0.0, 0.0]
-        self._tcp_orientation = [1.0, 0.0, 0.0, 0.0]
-        self._robot_position = [0.0, 0.35, 0.0]
-        self._robot_orientation = [0.0, 0.0, 1.0, 0.0]
+        self._tcp_position = (0.0, 0.0, 0.0)
+        self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
+        self._robot_position = (0.0, 0.35, 0.0)
+        self._robot_orientation = (0.0, 0.0, 1.0, 0.0)
         self._fake_hardware = False
 
         self.trajectory_resolution = 50
@@ -245,7 +245,7 @@ class Robot:
             def __init__(self, robot_instance):
                 super().__init__(robot_instance)  # Initialise base attributes
                 self._tcp_position = (0.0, 0.0, 0.0618)
-                self._tcp_orientation = (0.0, 0.0, 0.0)
+                self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
                 self._command_publisher = self.robot.node.create_publisher(
                     Float32, '/robot/gripper/send_command', 10
                 )

@@ -4,9 +4,10 @@ import math
 robot = Robot()
 robot.set_fake_hardware(True)
 
-point = Robot.JointSpace.Point([0.0, 0.0,   0.0,  0.0, 0.0,  0.0])
+robot.tool_changer.attach_tool(robot.tools.gripper)
+# point = Robot.JointSpace.Point([0.0, 0.0,   0.0,  0.0, 0.0,  0.0])
 
-robot.joint_space.move(point)
+# robot.joint_space.move(point)
 
 
 pose = Robot.CartesianSpace.Pose()
@@ -16,7 +17,7 @@ pose.orientation = (0, 0.0,0.0)
 
 robot.cartesian_space.move(pose, False)
 
-pose.position = (0.0,0,0)
+pose.position = (0.1,0.1,0)
 pose.orientation = (0, 0.0,0.0)
 
 robot.cartesian_space.move(pose)

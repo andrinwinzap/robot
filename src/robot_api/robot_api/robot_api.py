@@ -82,32 +82,38 @@ class Robot:
         points = np.array(path)
         if points.shape[1] != 6:
             raise ValueError("Points must have 6 dimensions (joints).")
-        
+
         actual_time = proposed_time
         num_samples = 1000
+
         while True:
             num_points = points.shape[0]
             timestamps = np.linspace(0, actual_time, num_points)
             splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
-            
+
             t_sample = np.linspace(0, actual_time, num_samples)
-            max_joint_vel = 0
-            max_joint_acc = 0
-            for s in splines:
+            max_vel = np.zeros(6)
+            max_acc = np.zeros(6)
+
+            for j, s in enumerate(splines):
                 vel = s(t_sample, 1)
                 acc = s(t_sample, 2)
-                max_joint_vel = max(max_joint_vel, np.max(np.abs(vel)))
-                max_joint_acc = max(max_joint_acc, np.max(np.abs(acc)))
-            
-            vel_ratio = max_joint_vel / max(self.joint_velocity_limits)
-            acc_ratio = max_joint_acc / max(self.joint_acceleration_limits)
-            scale_factor = max(vel_ratio, np.sqrt(acc_ratio), 1.0)  # at least 1
-            
-            if scale_factor <= 1.0:
+                max_vel[j] = np.max(np.abs(vel))
+                max_acc[j] = np.max(np.abs(acc))
+
+            vel_ratios = max_vel / np.array(self.joint_velocity_limits)
+            acc_ratios = max_acc / np.array(self.joint_acceleration_limits)
+
+            # At least 1 → if within limits, ratio <= 1
+            scale_factor = max(np.max(vel_ratios), np.sqrt(np.max(acc_ratios)), 1.0)
+
+            if scale_factor <= 1.0 + 1e-3:  # small tolerance
                 break
-            actual_time *= scale_factor
-        
+
+            actual_time *= scale_factor  # stretch trajectory to slow it down
+
         return splines, actual_time
+
 
     def _generate_trajectory(self, path: "Robot.JointSpace.Path", proposed_time):
         trajectory = JointTrajectory()

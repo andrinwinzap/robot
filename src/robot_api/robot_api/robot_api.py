@@ -338,7 +338,7 @@ class Robot:
         def __init__(self, robot_instance):
             self.robot = robot_instance
             self.speed = 0.05
-            self.acceleration = 0.01
+            self.acceleration = 0.05
             self.step_size = 0.01
         
         def _robot_to_tcp(self):

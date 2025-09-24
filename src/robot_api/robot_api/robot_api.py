@@ -78,59 +78,63 @@ class Robot:
             self.node.get_logger().warn(f"Missing joint in /joint_states input: {e}")
             return
 
-    def _generate_cubic_spline(self, path: "Robot.JointSpace.Path", proposed_time):
+    def _generate_cubic_spline(self, path: "Robot.JointSpace.Path"):
         points = np.array(path)
         if points.shape[1] != 6:
             raise ValueError("Points must have 6 dimensions (joints).")
-
-        actual_time = proposed_time
+        
+        # Extract timestamps from path points
+        if any(p.time_from_start is None for p in path.points):
+            raise ValueError("All joint-space points must have time_from_start set.")
+        
+        timestamps = np.array([p.time_from_start for p in path.points])
+        splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
+        
+        # Optional: check max velocity / acceleration and rescale if needed
         num_samples = 1000
+        t_sample = np.linspace(timestamps[0], timestamps[-1], num_samples)
+        max_vel = np.zeros(6)
+        max_acc = np.zeros(6)
+        for j, s in enumerate(splines):
+            vel = s(t_sample, 1)
+            acc = s(t_sample, 2)
+            max_vel[j] = np.max(np.abs(vel))
+            max_acc[j] = np.max(np.abs(acc))
 
-        while True:
-            num_points = points.shape[0]
-            timestamps = np.linspace(0, actual_time, num_points)
+        vel_ratios = max_vel / np.array(self.joint_velocity_limits)
+        acc_ratios = max_acc / np.array(self.joint_acceleration_limits)
+        scale_factor = max(np.max(vel_ratios), np.sqrt(np.max(acc_ratios)), 1.0)
+
+        if scale_factor > 1.0 + 1e-3:
+            # Stretch timestamps to respect limits
+            timestamps = timestamps * scale_factor
             splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
 
-            t_sample = np.linspace(0, actual_time, num_samples)
-            max_vel = np.zeros(6)
-            max_acc = np.zeros(6)
-
-            for j, s in enumerate(splines):
-                vel = s(t_sample, 1)
-                acc = s(t_sample, 2)
-                max_vel[j] = np.max(np.abs(vel))
-                max_acc[j] = np.max(np.abs(acc))
-
-            vel_ratios = max_vel / np.array(self.joint_velocity_limits)
-            acc_ratios = max_acc / np.array(self.joint_acceleration_limits)
-
-            # At least 1 → if within limits, ratio <= 1
-            scale_factor = max(np.max(vel_ratios), np.sqrt(np.max(acc_ratios)), 1.0)
-
-            if scale_factor <= 1.0 + 1e-3:  # small tolerance
-                break
-
-            actual_time *= scale_factor  # stretch trajectory to slow it down
-
-        return splines, actual_time
+        return splines, timestamps[-1]
 
 
-    def _generate_trajectory(self, path: "Robot.JointSpace.Path", proposed_time):
+
+    def _generate_trajectory(self, path: "Robot.JointSpace.Path"):
         trajectory = JointTrajectory()
         trajectory.header.stamp = (self.node.get_clock().now() +
                                 rclpy.duration.Duration(seconds=0.1)).to_msg()  # small delay
-        trajectory._joint_names = self._joint_names
+        trajectory.joint_names = self._joint_names
 
-        splines, actual_time = self._generate_cubic_spline(path, proposed_time)
+        # Generate cubic splines using the point timestamps
+        splines, total_time = self._generate_cubic_spline(path)
 
-        num_points = self.joint_trajectory_resolution
-        times = np.linspace(0, actual_time, num_points)
+        # Use original point timestamps for interpolation
+        timestamps = np.array([p.time_from_start for p in path.points])
+
+        # Optionally: generate intermediate points for smooth trajectory
+        num_samples = self.joint_trajectory_resolution
+        times = np.linspace(timestamps[0], timestamps[-1], num_samples)
 
         for t in times:
             point = JointTrajectoryPoint()
-            point.positions = [s(t, 0) for s in splines]
-            point.velocities = [s(t, 1) for s in splines]
-            point.accelerations = [s(t, 2) for s in splines]
+            point.positions = [float(s(t, 0)) for s in splines]
+            point.velocities = [float(s(t, 1)) for s in splines]
+            point.accelerations = [float(s(t, 2)) for s in splines]
 
             dur = Duration()
             dur.sec = int(np.floor(t))
@@ -139,10 +143,12 @@ class Robot:
 
             trajectory.points.append(point)
 
+        # Ensure last point stops cleanly
         trajectory.points[-1].velocities = [0.0] * len(self._joint_names)
         trajectory.points[-1].accelerations = [0.0] * len(self._joint_names)
 
         return trajectory
+
 
     def _send_trajectory(self, trajectory):
         if not self._trajectory_client.wait_for_server(timeout_sec=5.0):
@@ -239,7 +245,7 @@ class Robot:
                 self._command_publisher.publish(msg)
 
             self.robot._tcp_position = (0,0,0)
-            self.robot._tcp_position = (0,0,0,0)
+            self.robot._tcp_orientation = (0,0,0,0)
             self.current_tool = None
 
     class Tools:
@@ -275,12 +281,17 @@ class Robot:
             if not check_limits(point.joint_configuration):
                 self.robot.node.get_logger().error(f"Joint positions not within limits")
 
-            points = np.array([np.array(self.robot._joint_configuration), np.array(point.joint_configuration)])
+            path = Robot.JointSpace.Path()
+
+            start_point = Robot.JointSpace.Point(self.robot._joint_configuration)
+            start_point.time_from_start = 0.0
+            path.add(start_point)
 
             dq = np.abs(np.array(self.robot._joint_configuration) - np.array(point.joint_configuration))
-            proposed_time = np.max(dq) / self.speed
+            point.time_from_start = np.max(dq) / self.speed
+            path.add(point)
 
-            trajectory = self.robot._generate_trajectory(points, proposed_time)
+            trajectory = self.robot._generate_trajectory(path)
 
             return self.robot._send_trajectory(trajectory)
 
@@ -289,8 +300,9 @@ class Robot:
             return Robot.JointSpace.Point(joint_configuration)
         
         class Point:
-            def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
+            def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0), time_from_start=None):
                 self.joint_configuration = list(joint_configuration)
+                self.time_from_start = time_from_start
 
             def __repr__(self):
                 subscripts = "₁₂₃₄₅₆"
@@ -326,7 +338,8 @@ class Robot:
         def __init__(self, robot_instance):
             self.robot = robot_instance
             self.speed = 0.05
-            self.step_size = 0.005
+            self.acceleration = 0.01
+            self.step_size = 0.01
         
         def _robot_to_tcp(self):
             pos = np.array(self.robot._tcp_position, float)
@@ -372,26 +385,64 @@ class Robot:
             T[:3, 3] = interp_p
             return T
         
+        def _trapezoidal_profile(self, distance, v_max, a_max, dt=0.001):
+            s = []
+            times = []
+            t = 0.0
+            pos = vel = 0.0
+            
+            t_acc = v_max / a_max
+            d_acc = 0.5 * a_max * t_acc**2
+            
+            if 2 * d_acc > distance:
+                t_acc = np.sqrt(distance / a_max)
+                t_total = 2 * t_acc
+            else:
+                d_cruise = distance - 2 * d_acc
+                t_cruise = d_cruise / v_max
+                t_total = 2 * t_acc + t_cruise
+            
+            while t < t_total + 1e-6:
+                if t < t_acc:
+                    pos = 0.5 * a_max * t**2
+                elif t < t_total - t_acc:
+                    pos = d_acc + v_max * (t - t_acc)
+                else:
+                    dt_dec = t - (t_total - t_acc)
+                    pos = distance - 0.5 * a_max * (t_acc - dt_dec)**2
+                s.append(pos)
+                times.append(t)
+                t += dt
+            return s, times
+
+
         def move(self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True):
             start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
             end = pose.as_matrix()
 
             path = Robot.CartesianSpace.Path()
 
-            dist = np.linalg.norm(start[:3, 3] - end[:3, 3])
-            num_points = max(2, int(dist / self.step_size) + 1)
-
             if enforce_linearity:
-                for i in range(num_points):
-                    alpha = i / (num_points - 1)
+                distance = np.linalg.norm(start[:3, 3] - end[:3, 3])
+                s_profile, t_profile = self._trapezoidal_profile(distance, v_max=self.speed, a_max=self.acceleration, dt=self.step_size)
+
+                for s, t in zip(s_profile, t_profile):
+                    alpha = s / distance if distance > 1e-9 else 1.0
                     T = self._interpolate_htm(start, end, alpha)
                     pose = Robot.CartesianSpace.Pose.from_matrix(T)
+                    pose.time_from_start = t
                     path.add(pose)
+
             else:
-               start_pose = Robot.CartesianSpace.Pose.from_matrix(start)
-               end_pose = pose
-               path.add(start_pose)
-               path.add(end_pose)
+                start_pose = Robot.CartesianSpace.Pose.from_matrix(start)
+                start_pose.time_from_start = 0.0
+
+                end_pose = pose
+                distance = np.linalg.norm(np.array(start_pose.position) - np.array(end_pose.position))
+                end_pose.time_from_start = distance / self.speed
+
+                path.add(start_pose)
+                path.add(end_pose)
 
             return self.follow_path(path)
         
@@ -409,6 +460,7 @@ class Robot:
                     return False
                 prev_joint_configuration = chose_optimal_solution(prev_joint_configuration, ik_solutions)
                 point = Robot.JointSpace.Point(prev_joint_configuration)
+                point.time_from_start = pose.time_from_start
                 joint_space_path.add(point)
 
             offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
@@ -416,10 +468,8 @@ class Robot:
             if  offset > 1e-2:
                 self.robot.node.get_logger().error("Robot not at start of path")
                 return False
-            
-            proposed_time = path.length() / self.speed
 
-            trajectory = self.robot._generate_trajectory(joint_space_path, proposed_time)
+            trajectory = self.robot._generate_trajectory(joint_space_path)
 
             return self.robot._send_trajectory(trajectory)
                 
@@ -434,9 +484,10 @@ class Robot:
             return pose
         
         class Pose:
-            def __init__(self, position: Sequence[float]= (0.0, 0.0, 0.0), orientation: Sequence[float]= (0.0, 0.0, 0.0)):
+            def __init__(self, position: Sequence[float]= (0.0, 0.0, 0.0), orientation: Sequence[float]= (0.0, 0.0, 0.0), time_from_start=None):
                 self.position = list(position)
                 self.orientation = list(orientation)
+                self.time_from_start = time_from_start
 
             def as_matrix(self):
                 T = np.eye(4)

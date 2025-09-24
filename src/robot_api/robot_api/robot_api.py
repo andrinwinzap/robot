@@ -40,7 +40,7 @@ class Robot:
         self._robot_orientation = (0.0, 0.0, 1.0, 0.0)
         self._fake_hardware = False
 
-        self.trajectory_resolution = 50
+        self.joint_trajectory_resolution = 50
         self.joint_velocity_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
         self.joint_acceleration_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
         
@@ -123,7 +123,7 @@ class Robot:
 
         splines, actual_time = self._generate_cubic_spline(path, proposed_time)
 
-        num_points = self.trajectory_resolution
+        num_points = self.joint_trajectory_resolution
         times = np.linspace(0, actual_time, num_points)
 
         for t in times:
@@ -326,6 +326,7 @@ class Robot:
         def __init__(self, robot_instance):
             self.robot = robot_instance
             self.speed = 0.05
+            self.step_size = 0.005
         
         def _robot_to_tcp(self):
             pos = np.array(self.robot._tcp_position, float)
@@ -377,9 +378,12 @@ class Robot:
 
             path = Robot.CartesianSpace.Path()
 
+            dist = np.linalg.norm(start[:3, 3] - end[:3, 3])
+            num_points = max(2, int(dist / self.step_size) + 1)
+
             if enforce_linearity:
-                for i in range(self.robot.trajectory_resolution):
-                    alpha = i / (self.robot.trajectory_resolution - 1)
+                for i in range(num_points):
+                    alpha = i / (num_points - 1)
                     T = self._interpolate_htm(start, end, alpha)
                     pose = Robot.CartesianSpace.Pose.from_matrix(T)
                     path.add(pose)

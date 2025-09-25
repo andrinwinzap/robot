@@ -2,7 +2,9 @@ import numpy as np
 from robot_api import Robot
 
 robot = Robot()
-robot.set_fake_hardware(True)
+robot.set_fake_hardware(False)
+
+robot.tool_changer.attach_tool(robot.tools.gripper)
 
 x0 = 0.175
 y0 = 0.2

@@ -11,22 +11,12 @@ robot.cartesian_space.speed = 0.03
 
 robot.tool_changer.attach_tool(robot.tools.gripper)
 
-robot.joint_space.move(
-    Robot.JointSpace.Point((
-    0.52403,
-    -0.32743,
-    -1.81164,
-    -0.00000,
-    -1.00258,
-    0.52403
-    ))
-)
-
 robot.cartesian_space.move(
     Robot.CartesianSpace.Pose(
         (0.2,0.5,0.1), 
         (0,0,0)
-        )
+        ),
+        False
     )
 
 robot.tools.gripper.set_distance(0.05)
@@ -34,7 +24,7 @@ time.sleep(1)
 
 robot.cartesian_space.move(
     Robot.CartesianSpace.Pose(
-        (0.2,0.5,0.04), 
+        (0.2,0.5,0.03), 
         (0,0,0)
         )
     )
@@ -58,7 +48,7 @@ robot.cartesian_space.move(
 
 robot.cartesian_space.move(
     Robot.CartesianSpace.Pose(
-        (0.2,0.6,0.04), 
+        (0.2,0.6,0.03), 
         (0,0,0)
         )
     )

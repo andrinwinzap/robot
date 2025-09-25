@@ -16,7 +16,7 @@ JOINT_OFFSETS = {
 # TODO: Get limits from urdf 
 JOINT_LIMITS = [ 
     (-np.pi, np.pi),
-    (-np.pi, np.pi),
+    (-np.pi, 0), # Prevent shoulder from flipping over
     (-np.pi, np.pi),
     (-np.pi, np.pi),
     (-np.pi/2, np.pi/2),        

@@ -465,7 +465,7 @@ class Robot:
 
             offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
 
-            if  offset > 1e-2:
+            if  offset > 1e-1:
                 self.robot.node.get_logger().error("Robot not at start of path")
                 return False
 

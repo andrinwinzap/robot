@@ -24,17 +24,17 @@ def inverse_kinematics(T_06):
     P_04 = P_06 - JOINT_OFFSETS["D6"] * R_06[:, 2] # Derive wrist center position
 
     # Calculate q1
-    phi = np.arctan2(JOINT_OFFSETS["D2"], np.sqrt(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2))
+    phi = np.arctan2(JOINT_OFFSETS["D2"], np.sqrt(max(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2, 0)))
     theta_1 = np.arctan2(P_04[1], P_04[0])
     q1 = [theta_1 - phi, theta_1 + (np.pi + phi)]
     
     # Calculate q3
-    r = np.sqrt(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2)
+    r = np.sqrt(max(P_04[0]**2 + P_04[1]**2 - JOINT_OFFSETS["D2"]**2, 0))
     s = P_04[2] - JOINT_OFFSETS["D1"]
 
     theta_cos = (r**2 + s**2 - LINK_LENGTHS["L2"]**2 - JOINT_OFFSETS["D4"]**2) / (2 * LINK_LENGTHS["L2"] * JOINT_OFFSETS["D4"])
 
-    q3 = [np.arctan2(np.sqrt(1-theta_cos**2), theta_cos), np.arctan2(-np.sqrt(1-theta_cos**2), theta_cos)]
+    q3 = [np.arctan2(np.sqrt(max(1 - theta_cos**2, 0)), theta_cos), np.arctan2(-np.sqrt(max(1 - theta_cos**2, 0)), theta_cos)]
 
     alpha = np.arctan2(r, s)
     beta = np.arctan2(JOINT_OFFSETS["D4"] * np.sin(q3[0]), LINK_LENGTHS["L2"] + (np.cos(q3[0]) * JOINT_OFFSETS["D4"]))

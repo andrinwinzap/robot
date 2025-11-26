@@ -77,7 +77,10 @@ def sine(robot):
     NUM_PERIODS = 2
     WAVE_AMPLITUDE = 0.03
     NUM_POINTS = 50
-    TOTAL_TIME = 10
+
+    # Trapezoidal velocity profile parameters
+    MAX_SPEED = 0.03  # Maximum velocity (m/s)
+    MAX_ACCEL = 0.01  # Maximum acceleration (m/s^2)
 
     JOINT_SPACE_SPEED = 0.1
     CARTESIAN_SPACE_SPEED = 0.03
@@ -90,9 +93,63 @@ def sine(robot):
         Robot.CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False
     )
 
+    # Calculate total distance (approximate as straight line for timing)
+    total_distance = WAVE_LENGTH
+
+    # Calculate trapezoidal profile timing
+    t_accel = MAX_SPEED / MAX_ACCEL  # Time to reach max speed
+    d_accel = 0.5 * MAX_ACCEL * t_accel**2  # Distance during acceleration
+    d_decel = d_accel  # Distance during deceleration (symmetric)
+
+    # Check if we can reach max speed
+    if 2 * d_accel > total_distance:
+        # Triangular profile - never reach max speed
+        t_accel = np.sqrt(total_distance / MAX_ACCEL)
+        t_cruise = 0
+        t_decel = t_accel
+        d_accel = 0.5 * total_distance
+        d_cruise = 0
+        d_decel = 0.5 * total_distance
+        actual_max_speed = MAX_ACCEL * t_accel
+    else:
+        # Trapezoidal profile - reach max speed
+        d_cruise = total_distance - 2 * d_accel
+        t_cruise = d_cruise / MAX_SPEED
+        t_decel = t_accel
+        actual_max_speed = MAX_SPEED
+
+    total_time = t_accel + t_cruise + t_decel
+
+    def trapezoidal_profile(t):
+        """
+        Returns normalized position (0 to 1) and velocity for given time.
+        """
+        if t <= t_accel:
+            # Acceleration phase
+            s = 0.5 * MAX_ACCEL * t**2
+            return s / total_distance
+        elif t <= t_accel + t_cruise:
+            # Constant velocity phase
+            s = d_accel + actual_max_speed * (t - t_accel)
+            return s / total_distance
+        elif t <= total_time:
+            # Deceleration phase
+            t_dec = t - t_accel - t_cruise
+            s = (
+                d_accel
+                + d_cruise
+                + actual_max_speed * t_dec
+                - 0.5 * MAX_ACCEL * t_dec**2
+            )
+            return s / total_distance
+        else:
+            return 1.0
+
     path = Robot.CartesianSpace.Path()
     for i in range(NUM_POINTS):
-        alpha = i / (NUM_POINTS - 1)
+        t = (i / (NUM_POINTS - 1)) * total_time  # Actual time
+        alpha = trapezoidal_profile(t)  # Position fraction with trapezoid profile
+
         y = Y0 + alpha * WAVE_LENGTH
         x = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * alpha * NUM_PERIODS)
         z = Z0
@@ -100,7 +157,7 @@ def sine(robot):
         pose = Robot.CartesianSpace.Pose(
             position=(x, y, z),
             orientation=(0, 0, 0),
-            time_from_start=alpha * TOTAL_TIME,
+            time_from_start=t,
         )
         path.add(pose)
 
@@ -158,6 +215,8 @@ def main():
         print("1. Pick and Place")
         print("2. Sine Wave")
         print("3. E-STOP")
+        print("4. Attach Tool")
+        print("5. Detach Tool")
 
         choice = input("\nEnter your choice: ")
         print()
@@ -170,6 +229,19 @@ def main():
             sine(robot)
         elif choice == "3":
             estop(robot)
+        elif choice == "4":
+            print("Available tools:")
+            print("1. Gripper")
+
+            choice = input("\nEnter your choice: ")
+            print()
+            if choice == "1":
+                robot.tool_changer.attach_tool(robot.tools.gripper)
+            else:
+                print("Invalid choice. Please try again.")
+
+        elif choice == "5":
+            robot.tool_changer.detach_tool()
         else:
             print("Invalid choice. Please try again.")
 

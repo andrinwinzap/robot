@@ -84,6 +84,30 @@ class Robot:
             rclpy.spin_once(self.node, timeout_sec=0.1)
         self.node.get_logger().debug("First joint state received, robot ready.")
 
+    def set_fake_hardware(self, value):
+        param = Parameter()
+        param.name = "fake_hardware"
+        param.value.type = ParameterType.PARAMETER_BOOL
+        param.value.bool_value = value
+        req = SetParameters.Request()
+        req.parameters = [param]
+        future = self._set_hardware_param_client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future)
+        resp = future.result()
+        if not resp.results[0].successful:
+            raise RuntimeError("Failed to set simulation mode")
+        self._fake_hardware = value
+
+    def set_debug_mode(self, value):
+        if value:
+            self.node.get_logger().set_level(LoggingSeverity.DEBUG)
+        else:
+            self.node.get_logger().set_level(LoggingSeverity.INFO)
+
+    def shutdown(self):
+        self.node.destroy_node()
+        rclpy.shutdown()
+
     def _switch_controllers(
         self,
         start: list[str],
@@ -261,30 +285,6 @@ class Robot:
             )
             return False
 
-    def set_fake_hardware(self, value):
-        param = Parameter()
-        param.name = "fake_hardware"
-        param.value.type = ParameterType.PARAMETER_BOOL
-        param.value.bool_value = value
-        req = SetParameters.Request()
-        req.parameters = [param]
-        future = self._set_hardware_param_client.call_async(req)
-        rclpy.spin_until_future_complete(self.node, future)
-        resp = future.result()
-        if not resp.results[0].successful:
-            raise RuntimeError("Failed to set simulation mode")
-        self._fake_hardware = value
-
-    def set_debug_mode(self, value):
-        if value:
-            self.node.get_logger().set_level(LoggingSeverity.DEBUG)
-        else:
-            self.node.get_logger().set_level(LoggingSeverity.INFO)
-
-    def shutdown(self):
-        self.node.destroy_node()
-        rclpy.shutdown()
-
     class ToolChanger:
         def __init__(self, robot_instance):
             self.robot = robot_instance
@@ -419,89 +419,12 @@ class Robot:
                 )
 
     class CartesianSpace:
-
         def __init__(self, robot_instance):
             self.robot = robot_instance
             self.linear_speed = 0.05
             self.angular_speed = 0.1
             self.linear_acceleration = 0.05
             self.interpolation_step_size = 0.01
-
-        def _robot_to_tcp(self):
-            pos = np.array(self.robot._tcp_position, float)
-            quat = np.array(self.robot._tcp_orientation, float)
-
-            if np.linalg.norm(quat) == 0:
-                self.robot.node.get_logger().warn(
-                    "_tcp_orientation quaternion must not be zero."
-                )
-                return np.eye(4)
-
-            quat /= np.linalg.norm(quat)
-
-            T = np.eye(4)
-            T[:3, :3] = R.from_quat(quat).as_matrix()
-            T[:3, 3] = pos
-            return T
-
-        def _tcp_to_robot(self):
-            return np.linalg.inv(self._robot_to_tcp())
-
-        def _world_to_base(self):
-            pos = self.robot._robot_position
-            quat = self.robot._robot_orientation
-            quat /= np.linalg.norm(quat)
-            T = np.eye(4)
-            T[:3, :3] = R.from_quat(quat).as_matrix()
-            T[:3, 3] = pos
-            return T
-
-        def _base_to_world(self):
-            return np.linalg.inv(self._world_to_base())
-
-        def _interpolate_htm(self, start_T, end_T, t):
-            start_p = start_T[:3, 3]
-            end_p = end_T[:3, 3]
-            interp_p = start_p * (1 - t) + end_p * t
-
-            rotations = R.from_matrix([start_T[:3, :3], end_T[:3, :3]])
-            slerp = Slerp([0, 1], rotations)
-            interp_R = slerp([t])[0].as_matrix()
-
-            T = np.eye(4)
-            T[:3, :3] = interp_R
-            T[:3, 3] = interp_p
-            return T
-
-        def _trapezoidal_profile(self, distance, v_max, a_max, dt=0.001):
-            s = []
-            times = []
-            t = 0.0
-            pos = vel = 0.0
-
-            t_acc = v_max / a_max
-            d_acc = 0.5 * a_max * t_acc**2
-
-            if 2 * d_acc > distance:
-                t_acc = np.sqrt(distance / a_max)
-                t_total = 2 * t_acc
-            else:
-                d_cruise = distance - 2 * d_acc
-                t_cruise = d_cruise / v_max
-                t_total = 2 * t_acc + t_cruise
-
-            while t < t_total + 1e-6:
-                if t < t_acc:
-                    pos = 0.5 * a_max * t**2
-                elif t < t_total - t_acc:
-                    pos = d_acc + v_max * (t - t_acc)
-                else:
-                    dt_dec = t - (t_total - t_acc)
-                    pos = distance - 0.5 * a_max * (t_acc - dt_dec) ** 2
-                s.append(pos)
-                times.append(t)
-                t += dt
-            return s, times
 
         def move(
             self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True
@@ -603,6 +526,82 @@ class Robot:
             pose = Robot.CartesianSpace.Pose(position, orientation)
             return pose
 
+        def _robot_to_tcp(self):
+            pos = np.array(self.robot._tcp_position, float)
+            quat = np.array(self.robot._tcp_orientation, float)
+
+            if np.linalg.norm(quat) == 0:
+                self.robot.node.get_logger().warn(
+                    "_tcp_orientation quaternion must not be zero."
+                )
+                return np.eye(4)
+
+            quat /= np.linalg.norm(quat)
+
+            T = np.eye(4)
+            T[:3, :3] = R.from_quat(quat).as_matrix()
+            T[:3, 3] = pos
+            return T
+
+        def _tcp_to_robot(self):
+            return np.linalg.inv(self._robot_to_tcp())
+
+        def _world_to_base(self):
+            pos = self.robot._robot_position
+            quat = self.robot._robot_orientation
+            quat /= np.linalg.norm(quat)
+            T = np.eye(4)
+            T[:3, :3] = R.from_quat(quat).as_matrix()
+            T[:3, 3] = pos
+            return T
+
+        def _base_to_world(self):
+            return np.linalg.inv(self._world_to_base())
+
+        def _interpolate_htm(self, start_T, end_T, t):
+            start_p = start_T[:3, 3]
+            end_p = end_T[:3, 3]
+            interp_p = start_p * (1 - t) + end_p * t
+
+            rotations = R.from_matrix([start_T[:3, :3], end_T[:3, :3]])
+            slerp = Slerp([0, 1], rotations)
+            interp_R = slerp([t])[0].as_matrix()
+
+            T = np.eye(4)
+            T[:3, :3] = interp_R
+            T[:3, 3] = interp_p
+            return T
+
+        def _trapezoidal_profile(self, distance, v_max, a_max, dt=0.001):
+            s = []
+            times = []
+            t = 0.0
+            pos = vel = 0.0
+
+            t_acc = v_max / a_max
+            d_acc = 0.5 * a_max * t_acc**2
+
+            if 2 * d_acc > distance:
+                t_acc = np.sqrt(distance / a_max)
+                t_total = 2 * t_acc
+            else:
+                d_cruise = distance - 2 * d_acc
+                t_cruise = d_cruise / v_max
+                t_total = 2 * t_acc + t_cruise
+
+            while t < t_total + 1e-6:
+                if t < t_acc:
+                    pos = 0.5 * a_max * t**2
+                elif t < t_total - t_acc:
+                    pos = d_acc + v_max * (t - t_acc)
+                else:
+                    dt_dec = t - (t_total - t_acc)
+                    pos = distance - 0.5 * a_max * (t_acc - dt_dec) ** 2
+                s.append(pos)
+                times.append(t)
+                t += dt
+            return s, times
+        
         class Pose:
             def __init__(
                 self,

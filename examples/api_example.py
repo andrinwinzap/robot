@@ -10,7 +10,7 @@ robot.set_debug_mode(False)
 
 # Set motion speeds
 robot.joint_space.speed = 0.1
-robot.cartesian_space.speed = 0.05
+robot.cartesian_space.linear_speed = 0.05
 
 # Attach the gripper tool
 robot.tool_changer.attach_tool(robot.tools.gripper)

@@ -4,7 +4,7 @@ import os
 import pickle
 import hashlib
 import json
-from sympy import lambdify, symbols, pi, cos, sin,  Matrix
+from sympy import lambdify, symbols, pi, cos, sin,  Matrix, simplify
 from .config import LINK_LENGTHS, JOINT_OFFSETS
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "__cache__")
@@ -32,6 +32,7 @@ DH_Params = [
 ]
 
 def compute_symbolic_fk():
+
     HTM_symbolic = Matrix([
         [cos(theta), -sin(theta)*cos(alpha),  sin(theta)*sin(alpha), a*cos(theta)],
         [sin(theta),  cos(theta)*cos(alpha), -cos(theta)*sin(alpha), a*sin(theta)],
@@ -52,13 +53,42 @@ def compute_symbolic_fk():
     T_05_symbolic = T_04_symbolic * T_45_symbolic
     T_06_symbolic = T_05_symbolic * T_56_symbolic
 
+    Ts = [
+        Matrix.eye(4),
+        T_01_symbolic,
+        T_02_symbolic,
+        T_03_symbolic,
+        T_04_symbolic,
+        T_05_symbolic
+    ]
+
+    origins = [T[:3, 3] for T in Ts]
+    z_axes = [T[:3, 2] for T in Ts]
+
+    o_6 = T_06_symbolic[:3, 3]
+
+    J_v = []
+    J_w = []
+
+    for i in range(6):
+        J_v.append(z_axes[i].cross(o_6 - origins[i]))
+        J_w.append(z_axes[i])
+
+    J = Matrix.vstack(
+        Matrix.hstack(*J_v),
+        Matrix.hstack(*J_w)
+    )
+
+    J_symbolic = simplify(J)
+
     return {
         "T_01_symbolic": T_01_symbolic,
         "T_02_symbolic": T_02_symbolic,
         "T_03_symbolic": T_03_symbolic,
         "T_04_symbolic": T_04_symbolic,
         "T_05_symbolic": T_05_symbolic,
-        "T_06_symbolic": T_06_symbolic
+        "T_06_symbolic": T_06_symbolic,
+        "J_symbolic": J_symbolic
     }
 
 if os.path.exists(CACHE_FILE):
@@ -77,3 +107,4 @@ else:
 T_01_func = lambdify((theta_1,), symbolic_fk["T_01_symbolic"], modules="numpy")
 T_06_func = lambdify(thetas, symbolic_fk["T_06_symbolic"], modules="numpy")
 R_03_func = lambdify((theta_1, theta_2, theta_3), symbolic_fk["T_03_symbolic"][:3, :3], modules="numpy")
+J_func = lambdify(thetas, symbolic_fk["J_symbolic"], modules="numpy")

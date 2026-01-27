@@ -1,20 +1,19 @@
 # robot_api/robot_api/robot.py
 
+from platform import node
+from xmlrpc import client
 import numpy as np
 import time
-
 from typing import List, Sequence
-
 from scipy.spatial.transform import Rotation as R, Slerp
 from scipy.interpolate import CubicSpline
-
-from robot_api.numeric_kinematics import forward_kinematics, inverse_kinematics, check_limits, chose_optimal_solution
-
+from robot_api.numeric_kinematics import forward_kinematics, inverse_kinematics, check_limits, chose_optimal_solution, jacobian_dls_pinv
+from robot_api.symbolic_kinematics import T_06_func, T_01_func, R_03_func
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient, ActionServer
 from rclpy.logging import LoggingSeverity
-from std_msgs.msg import Bool, Float32
+from std_msgs.msg import Bool, Float32, Float64MultiArray
 from control_msgs.action import FollowJointTrajectory
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
@@ -23,6 +22,7 @@ from rcl_interfaces.srv import SetParameters, GetParameters
 from rcl_interfaces.msg import Parameter, ParameterType
 from builtin_interfaces.msg import Duration
 from rclpy.logging import LoggingSeverity
+from controller_manager_msgs.srv import SwitchController
 
 class Tool:
     def __init__(self, robot_instance):
@@ -54,11 +54,14 @@ class Robot:
         self.node.create_subscription(JointState, '/joint_states', self._joint_states_callback, 10)
 
         self._trajectory_client = ActionClient(self.node, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
+        self._velocity_controller_command_client = self.node.create_publisher(Float64MultiArray, '/velocity_forward_controller/commands', 10)
 
         self._set_hardware_param_client = self.node.create_client(
             SetParameters,
             '/robot_hardware_interface/set_parameters'
         )
+        
+        self._switch_controller_client = self.node.create_client(SwitchController, "/controller_manager/switch_controller")
 
         self.tool_changer = self.ToolChanger(self)
         self.tools = self.Tools(self)
@@ -69,6 +72,39 @@ class Robot:
         while self._joint_configuration is None:
             rclpy.spin_once(self.node, timeout_sec=0.1)
         self.node.get_logger().debug("First joint state received, robot ready.")
+
+    def _switch_controllers(self, start: list[str], stop: list[str], strictness: int = SwitchController.Request.BEST_EFFORT) -> bool:
+        if not self._switch_controller_client.wait_for_service(timeout_sec=5.0):
+            self.node.get_logger().error("SwitchController service not available")
+            return False
+
+        req = SwitchController.Request()
+        req.activate_controllers = start
+        req.deactivate_controllers = stop
+        req.strictness = strictness
+
+        future = self._switch_controller_client.call_async(req)
+        rclpy.spin_until_future_complete(self.node, future)
+        resp = future.result()
+
+        if resp is None:
+            self.node.get_logger().error("SwitchController call failed")
+            return False
+
+        self.node.get_logger().info(f"Switch controllers: start={start}, stop={stop}, ok={resp.ok}")
+        return resp.ok
+
+    def _use_velocity_controller(self) -> bool:
+        return self._switch_controllers(
+            start=["velocity_forward_controller"],
+            stop=["joint_trajectory_controller"]
+        )
+    
+    def _use_trajectory_controller(self) -> bool:
+        return self._switch_controllers(
+            start=["joint_trajectory_controller"],
+            stop=["velocity_forward_controller"]
+        )
 
     def _joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -294,11 +330,19 @@ class Robot:
             trajectory = self.robot._generate_trajectory(path)
 
             return self.robot._send_trajectory(trajectory)
-
-        def read(self):
-            joint_configuration = np.round(self.robot._joint_configuration, 5)
-            return Robot.JointSpace.Point(joint_configuration)
         
+        def set_velocities(self, velocities: Sequence[float]):
+            msg = Float64MultiArray()
+            msg.data = list(velocities)
+            self.robot._velocity_controller_command_client.publish(msg)
+            
+        def read(self, decimals: int = 5) -> "Robot.JointSpace.Point":
+            if decimals is None:
+                joint_configuration = self.robot._joint_configuration
+            else:
+                joint_configuration = np.round(self.robot._joint_configuration, decimals)
+            return Robot.JointSpace.Point(joint_configuration)
+
         class Point:
             def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0), time_from_start=None):
                 self.joint_configuration = list(joint_configuration)
@@ -337,9 +381,10 @@ class Robot:
 
         def __init__(self, robot_instance):
             self.robot = robot_instance
-            self.speed = 0.05
-            self.acceleration = 0.05
-            self.step_size = 0.01
+            self.linear_speed = 0.05
+            self.angular_speed = 0.1
+            self.linear_acceleration = 0.05
+            self.interpolation_step_size = 0.01
         
         def _robot_to_tcp(self):
             pos = np.array(self.robot._tcp_position, float)
@@ -420,14 +465,24 @@ class Robot:
             start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
             end = pose.as_matrix()
 
+            linear_dist = np.linalg.norm(start[:3, 3] - end[:3, 3])
+
+            R_start = start[:3, :3]
+            R_end = end[:3, :3]
+            R_diff = R_end @ R_start.T
+            rot_vec = R.from_matrix(R_diff).as_rotvec()
+            angular_dist = np.linalg.norm(rot_vec)
+
+            weight_factor = self.linear_speed / self.angular_speed
+            effective_distance = max(linear_dist, angular_dist * weight_factor)
+
             path = Robot.CartesianSpace.Path()
 
             if enforce_linearity:
-                distance = np.linalg.norm(start[:3, 3] - end[:3, 3])
-                s_profile, t_profile = self._trapezoidal_profile(distance, v_max=self.speed, a_max=self.acceleration, dt=self.step_size)
+                s_profile, t_profile = self._trapezoidal_profile(effective_distance, v_max=self.linear_speed, a_max=self.linear_acceleration, dt=self.interpolation_step_size)
 
                 for s, t in zip(s_profile, t_profile):
-                    alpha = s / distance if distance > 1e-9 else 1.0
+                    alpha = s / effective_distance if effective_distance > 1e-9 else 1.0
                     T = self._interpolate_htm(start, end, alpha)
                     pose = Robot.CartesianSpace.Pose.from_matrix(T)
                     pose.time_from_start = t
@@ -438,8 +493,13 @@ class Robot:
                 start_pose.time_from_start = 0.0
 
                 end_pose = pose
-                distance = np.linalg.norm(np.array(start_pose.position) - np.array(end_pose.position))
-                end_pose.time_from_start = distance / self.speed
+
+                time_linear = linear_dist / self.linear_speed
+                time_angular = angular_dist / self.angular_speed
+
+                total_duration = max(time_linear, time_angular)
+
+                end_pose.time_from_start = total_duration
 
                 path.add(start_pose)
                 path.add(end_pose)

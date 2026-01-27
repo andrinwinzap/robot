@@ -1,7 +1,7 @@
 # kinematics.py
 
 import numpy as np
-from .symbolic_kinematics import T_06_func, T_01_func, R_03_func
+from .symbolic_kinematics import T_06_func, T_01_func, R_03_func, J_func
 from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS, JOINT_LIMITS
 
 def normalize_angle(angle):
@@ -99,3 +99,8 @@ def chose_optimal_solution(current_joints, ik_solutions):
     diffs = np.linalg.norm(solutions - current, axis=1)
     best_idx = np.argmin(diffs)
     return ik_solutions[best_idx]
+
+def jacobian_dls_pinv(thetas, damping=1e-3):
+    J = J_func(*thetas)
+    m, n = J.shape
+    return J.T @ np.linalg.inv(J @ J.T + damping**2 * np.eye(m))

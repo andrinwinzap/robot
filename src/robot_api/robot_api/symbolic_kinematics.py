@@ -5,14 +5,15 @@ import pickle
 import hashlib
 import json
 from sympy import lambdify, symbols, pi, cos, sin, Matrix, simplify
-from .config import LINK_LENGTHS, JOINT_OFFSETS
+import robot_api.config as config
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "__cache__")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 params_hash = hashlib.sha256(
     json.dumps(
-        {"LINK_LENGTHS": LINK_LENGTHS, "JOINT_OFFSETS": JOINT_OFFSETS}, sort_keys=True
+        {"LINK_LENGTHS": config.LINK_LENGTHS, "JOINT_OFFSETS": config.JOINT_OFFSETS},
+        sort_keys=True,
     ).encode()
 ).hexdigest()
 
@@ -26,17 +27,17 @@ theta_1, theta_2, theta_3, theta_4, theta_5, theta_6 = symbols(
 thetas = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
 
 DH_Params = [
-    {theta: theta_1, d: JOINT_OFFSETS["D1"], alpha: -pi / 2, a: 0},
+    {theta: theta_1, d: config.JOINT_OFFSETS["D1"], alpha: -pi / 2, a: 0},
     {
         theta: theta_2 - (pi / 2),
-        d: JOINT_OFFSETS["D2"],
+        d: config.JOINT_OFFSETS["D2"],
         alpha: 0,
-        a: LINK_LENGTHS["L2"],
+        a: config.LINK_LENGTHS["L2"],
     },
     {theta: theta_3 + (pi / 2), d: 0, alpha: pi / 2, a: 0},
-    {theta: theta_4, d: JOINT_OFFSETS["D4"], alpha: -pi / 2, a: 0},
+    {theta: theta_4, d: config.JOINT_OFFSETS["D4"], alpha: -pi / 2, a: 0},
     {theta: theta_5, d: 0, alpha: pi / 2, a: 0},
-    {theta: theta_6, d: JOINT_OFFSETS["D6"], alpha: 0, a: 0},
+    {theta: theta_6, d: config.JOINT_OFFSETS["D6"], alpha: 0, a: 0},
 ]
 
 

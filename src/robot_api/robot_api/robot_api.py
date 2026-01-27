@@ -29,6 +29,7 @@ from rcl_interfaces.msg import Parameter, ParameterType
 from builtin_interfaces.msg import Duration
 from rclpy.logging import LoggingSeverity
 from controller_manager_msgs.srv import SwitchController
+import robot_api.config as config
 
 
 class Tool:
@@ -40,31 +41,18 @@ class Tool:
 
 class Robot:
     def __init__(self):
-        self._joint_names = [f"joint_{i+1}" for i in range(6)]
-        self._joint_configuration = None
+        self._robot_position = config.ROBOT_POSITION
+        self._robot_orientation = config.ROBOT_ORIENTATION
+        self.joint_velocity_limits = config.JOINT_VELOCITY_LIMITS
+        self.joint_acceleration_limits = config.JOINT_ACCELERATION_LIMITS
+        self.joint_trajectory_resolution = config.JOINT_TRAJECTORY_RESOLUTION
+
         self._tcp_position = (0.0, 0.0, 0.0)
         self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
-        self._robot_position = (0.0, 0.35, 0.0)
-        self._robot_orientation = (0.0, 0.0, 1.0, 0.0)
-        self._fake_hardware = False
 
-        self.joint_trajectory_resolution = 50
-        self.joint_velocity_limits = [
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-        ]
-        self.joint_acceleration_limits = [
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-            np.pi * 5,
-        ]
+        self._joint_names = [f"joint_{i+1}" for i in range(6)]
+        self._joint_configuration = None
+        self._fake_hardware = False
 
         rclpy.init()
 

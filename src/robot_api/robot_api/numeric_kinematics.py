@@ -2,7 +2,7 @@
 
 import numpy as np
 from .symbolic_kinematics import T_06_func, T_01_func, R_03_func, J_func
-from .config import EPSILON, JOINT_OFFSETS, LINK_LENGTHS, JOINT_LIMITS
+import robot_api.config as config
 
 
 def normalize_angle(angle):
@@ -10,7 +10,7 @@ def normalize_angle(angle):
 
 
 def check_limits(joint_angles):
-    for angle, (low, high) in zip(joint_angles, JOINT_LIMITS):
+    for angle, (low, high) in zip(joint_angles, config.JOINT_POSITION_LIMITS):
         if not (low <= angle <= high):
             return False
     return True
@@ -25,23 +25,25 @@ def inverse_kinematics(T_06):
     R_06 = T_06[:3, :3]  # Extract rotation part
     P_06 = T_06[:3, 3]  # Extract position part
 
-    P_04 = P_06 - JOINT_OFFSETS["D6"] * R_06[:, 2]  # Derive wrist center position
+    P_04 = (
+        P_06 - config.JOINT_OFFSETS["D6"] * R_06[:, 2]
+    )  # Derive wrist center position
 
     # Calculate q1
     phi = np.arctan2(
-        JOINT_OFFSETS["D2"],
-        np.sqrt(max(P_04[0] ** 2 + P_04[1] ** 2 - JOINT_OFFSETS["D2"] ** 2, 0)),
+        config.JOINT_OFFSETS["D2"],
+        np.sqrt(max(P_04[0] ** 2 + P_04[1] ** 2 - config.JOINT_OFFSETS["D2"] ** 2, 0)),
     )
     theta_1 = np.arctan2(P_04[1], P_04[0])
     q1 = [theta_1 - phi, theta_1 + (np.pi + phi)]
 
     # Calculate q3
-    r = np.sqrt(max(P_04[0] ** 2 + P_04[1] ** 2 - JOINT_OFFSETS["D2"] ** 2, 0))
-    s = P_04[2] - JOINT_OFFSETS["D1"]
+    r = np.sqrt(max(P_04[0] ** 2 + P_04[1] ** 2 - config.JOINT_OFFSETS["D2"] ** 2, 0))
+    s = P_04[2] - config.JOINT_OFFSETS["D1"]
 
     theta_cos = (
-        r**2 + s**2 - LINK_LENGTHS["L2"] ** 2 - JOINT_OFFSETS["D4"] ** 2
-    ) / (2 * LINK_LENGTHS["L2"] * JOINT_OFFSETS["D4"])
+        r**2 + s**2 - config.LINK_LENGTHS["L2"] ** 2 - config.JOINT_OFFSETS["D4"] ** 2
+    ) / (2 * config.LINK_LENGTHS["L2"] * config.JOINT_OFFSETS["D4"])
 
     q3 = [
         np.arctan2(np.sqrt(max(1 - theta_cos**2, 0)), theta_cos),
@@ -50,8 +52,8 @@ def inverse_kinematics(T_06):
 
     alpha = np.arctan2(r, s)
     beta = np.arctan2(
-        JOINT_OFFSETS["D4"] * np.sin(q3[0]),
-        LINK_LENGTHS["L2"] + (np.cos(q3[0]) * JOINT_OFFSETS["D4"]),
+        config.JOINT_OFFSETS["D4"] * np.sin(q3[0]),
+        config.LINK_LENGTHS["L2"] + (np.cos(q3[0]) * config.JOINT_OFFSETS["D4"]),
     )
     q2 = [alpha - beta, alpha + beta]
 
@@ -77,7 +79,7 @@ def inverse_kinematics(T_06):
         q4, q5, q6 = [None, None], [None, None], [None, None]
         q5[0] = np.arccos(r33)
 
-        if abs(np.sin(q5[0])) > EPSILON:
+        if abs(np.sin(q5[0])) > config.EPSILON:
             # nonsingular case
             q4[0] = np.arctan2(r23, r13)
             q6[0] = np.arctan2(r32, -r31)

@@ -7,7 +7,13 @@ import time
 from typing import List, Sequence
 from scipy.spatial.transform import Rotation as R, Slerp
 from scipy.interpolate import CubicSpline
-from robot_api.numeric_kinematics import forward_kinematics, inverse_kinematics, check_limits, chose_optimal_solution, jacobian_dls_pinv
+from robot_api.numeric_kinematics import (
+    forward_kinematics,
+    inverse_kinematics,
+    check_limits,
+    chose_optimal_solution,
+    jacobian_dls_pinv,
+)
 from robot_api.symbolic_kinematics import T_06_func, T_01_func, R_03_func
 import rclpy
 from rclpy.node import Node
@@ -24,11 +30,13 @@ from builtin_interfaces.msg import Duration
 from rclpy.logging import LoggingSeverity
 from controller_manager_msgs.srv import SwitchController
 
+
 class Tool:
     def __init__(self, robot_instance):
         self.robot = robot_instance
-        self._tcp_position = (0.0,0.0,0.0)
+        self._tcp_position = (0.0, 0.0, 0.0)
         self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
+
 
 class Robot:
     def __init__(self):
@@ -41,27 +49,49 @@ class Robot:
         self._fake_hardware = False
 
         self.joint_trajectory_resolution = 50
-        self.joint_velocity_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
-        self.joint_acceleration_limits = [np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5, np.pi*5]
-        
+        self.joint_velocity_limits = [
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+        ]
+        self.joint_acceleration_limits = [
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+            np.pi * 5,
+        ]
+
         rclpy.init()
 
         self.node = Node(
-                "robot_api_client",
-                automatically_declare_parameters_from_overrides=True
-            )
+            "robot_api_client", automatically_declare_parameters_from_overrides=True
+        )
 
-        self.node.create_subscription(JointState, '/joint_states', self._joint_states_callback, 10)
+        self.node.create_subscription(
+            JointState, "/joint_states", self._joint_states_callback, 10
+        )
 
-        self._trajectory_client = ActionClient(self.node, FollowJointTrajectory, '/joint_trajectory_controller/follow_joint_trajectory')
-        self._velocity_controller_command_client = self.node.create_publisher(Float64MultiArray, '/velocity_forward_controller/commands', 10)
+        self._trajectory_client = ActionClient(
+            self.node,
+            FollowJointTrajectory,
+            "/joint_trajectory_controller/follow_joint_trajectory",
+        )
+        self._velocity_controller_command_client = self.node.create_publisher(
+            Float64MultiArray, "/velocity_forward_controller/commands", 10
+        )
 
         self._set_hardware_param_client = self.node.create_client(
-            SetParameters,
-            '/robot_hardware_interface/set_parameters'
+            SetParameters, "/robot_hardware_interface/set_parameters"
         )
-        
-        self._switch_controller_client = self.node.create_client(SwitchController, "/controller_manager/switch_controller")
+
+        self._switch_controller_client = self.node.create_client(
+            SwitchController, "/controller_manager/switch_controller"
+        )
 
         self.tool_changer = self.ToolChanger(self)
         self.tools = self.Tools(self)
@@ -73,7 +103,12 @@ class Robot:
             rclpy.spin_once(self.node, timeout_sec=0.1)
         self.node.get_logger().debug("First joint state received, robot ready.")
 
-    def _switch_controllers(self, start: list[str], stop: list[str], strictness: int = SwitchController.Request.BEST_EFFORT) -> bool:
+    def _switch_controllers(
+        self,
+        start: list[str],
+        stop: list[str],
+        strictness: int = SwitchController.Request.BEST_EFFORT,
+    ) -> bool:
         if not self._switch_controller_client.wait_for_service(timeout_sec=5.0):
             self.node.get_logger().error("SwitchController service not available")
             return False
@@ -91,19 +126,19 @@ class Robot:
             self.node.get_logger().error("SwitchController call failed")
             return False
 
-        self.node.get_logger().info(f"Switch controllers: start={start}, stop={stop}, ok={resp.ok}")
+        self.node.get_logger().info(
+            f"Switch controllers: start={start}, stop={stop}, ok={resp.ok}"
+        )
         return resp.ok
 
     def _use_velocity_controller(self) -> bool:
         return self._switch_controllers(
-            start=["velocity_forward_controller"],
-            stop=["joint_trajectory_controller"]
+            start=["velocity_forward_controller"], stop=["joint_trajectory_controller"]
         )
-    
+
     def _use_trajectory_controller(self) -> bool:
         return self._switch_controllers(
-            start=["joint_trajectory_controller"],
-            stop=["velocity_forward_controller"]
+            start=["joint_trajectory_controller"], stop=["velocity_forward_controller"]
         )
 
     def _joint_states_callback(self, msg: JointState):
@@ -118,14 +153,16 @@ class Robot:
         points = np.array(path)
         if points.shape[1] != 6:
             raise ValueError("Points must have 6 dimensions (joints).")
-        
+
         # Extract timestamps from path points
         if any(p.time_from_start is None for p in path.points):
             raise ValueError("All joint-space points must have time_from_start set.")
-        
+
         timestamps = np.array([p.time_from_start for p in path.points])
-        splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
-        
+        splines = [
+            CubicSpline(timestamps, points[:, j], bc_type="clamped") for j in range(6)
+        ]
+
         # Optional: check max velocity / acceleration and rescale if needed
         num_samples = 1000
         t_sample = np.linspace(timestamps[0], timestamps[-1], num_samples)
@@ -144,16 +181,18 @@ class Robot:
         if scale_factor > 1.0 + 1e-3:
             # Stretch timestamps to respect limits
             timestamps = timestamps * scale_factor
-            splines = [CubicSpline(timestamps, points[:, j], bc_type='clamped') for j in range(6)]
+            splines = [
+                CubicSpline(timestamps, points[:, j], bc_type="clamped")
+                for j in range(6)
+            ]
 
         return splines, timestamps[-1]
 
-
-
     def _generate_trajectory(self, path: "Robot.JointSpace.Path"):
         trajectory = JointTrajectory()
-        trajectory.header.stamp = (self.node.get_clock().now() +
-                                rclpy.duration.Duration(seconds=0.1)).to_msg()  # small delay
+        trajectory.header.stamp = (
+            self.node.get_clock().now() + rclpy.duration.Duration(seconds=0.1)
+        ).to_msg()  # small delay
         trajectory.joint_names = self._joint_names
 
         # Generate cubic splines using the point timestamps
@@ -185,7 +224,6 @@ class Robot:
 
         return trajectory
 
-
     def _send_trajectory(self, trajectory):
         if not self._trajectory_client.wait_for_server(timeout_sec=5.0):
             self.node.get_logger().error("FollowJointTrajectory server not available.")
@@ -201,15 +239,22 @@ class Robot:
 
             pos_error = [d - a for d, a in zip(desired.positions, actual.positions)]
             formatted_pos_error = ", ".join(f"{e:+.4f}" for e in pos_error)
-            self.node.get_logger().debug(f"Joint position error: [{formatted_pos_error}]")
+            self.node.get_logger().debug(
+                f"Joint position error: [{formatted_pos_error}]"
+            )
 
             if desired.velocities and actual.velocities:
-                vel_error = [d - a for d, a in zip(desired.velocities, actual.velocities)]
+                vel_error = [
+                    d - a for d, a in zip(desired.velocities, actual.velocities)
+                ]
                 formatted_vel_error = ", ".join(f"{e:+.4f}" for e in vel_error)
-                self.node.get_logger().debug(f"Joint velocity error: [{formatted_vel_error}]")
+                self.node.get_logger().debug(
+                    f"Joint velocity error: [{formatted_vel_error}]"
+                )
 
-
-        send_goal_future = self._trajectory_client.send_goal_async(fjt_goal, feedback_callback=feedback_callback)
+        send_goal_future = self._trajectory_client.send_goal_async(
+            fjt_goal, feedback_callback=feedback_callback
+        )
         rclpy.spin_until_future_complete(self.node, send_goal_future)
         goal_handle = send_goal_future.result()
 
@@ -230,9 +275,11 @@ class Robot:
             self.node.get_logger().debug("Trajectory completed successfully.")
             return True
         else:
-            self.node.get_logger().error(f"Controller failed with error code {result.error_code}")
+            self.node.get_logger().error(
+                f"Controller failed with error code {result.error_code}"
+            )
             return False
-        
+
     def set_fake_hardware(self, value):
         param = Parameter()
         param.name = "fake_hardware"
@@ -246,13 +293,13 @@ class Robot:
         if not resp.results[0].successful:
             raise RuntimeError("Failed to set simulation mode")
         self._fake_hardware = value
-    
+
     def set_debug_mode(self, value):
         if value:
             self.node.get_logger().set_level(LoggingSeverity.DEBUG)
         else:
             self.node.get_logger().set_level(LoggingSeverity.INFO)
-            
+
     def shutdown(self):
         self.node.destroy_node()
         rclpy.shutdown()
@@ -261,8 +308,10 @@ class Robot:
         def __init__(self, robot_instance):
             self.robot = robot_instance
             self.current_tool = None
-            self._command_publisher = self.robot.node.create_publisher(Bool, '/robot/tool_changer/attach', 10)
-        
+            self._command_publisher = self.robot.node.create_publisher(
+                Bool, "/robot/tool_changer/attach", 10
+            )
+
         def attach_tool(self, tool: Tool):
             msg = Bool()
             msg.data = True
@@ -280,8 +329,8 @@ class Robot:
             if not self.robot._fake_hardware:
                 self._command_publisher.publish(msg)
 
-            self.robot._tcp_position = (0,0,0)
-            self.robot._tcp_orientation = (0,0,0,0)
+            self.robot._tcp_position = (0, 0, 0)
+            self.robot._tcp_orientation = (0, 0, 0, 0)
             self.current_tool = None
 
     class Tools:
@@ -295,19 +344,19 @@ class Robot:
                 self._tcp_position = (0.0, 0.0, 0.0618)
                 self._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
                 self._command_publisher = self.robot.node.create_publisher(
-                    Float32, '/robot/gripper/send_command', 10
+                    Float32, "/robot/gripper/send_command", 10
                 )
 
             def set_distance(self, pos):
-                
-                if not self.robot.tool_changer.current_tool==self:
+
+                if not self.robot.tool_changer.current_tool == self:
                     raise RuntimeError(f" {self} not the current tool")
-                
+
                 msg = Float32()
                 msg.data = float(pos)
                 if not self.robot._fake_hardware:
                     self._command_publisher.publish(msg)
-        
+
     class JointSpace:
         def __init__(self, robot_instance):
             self.robot = robot_instance
@@ -323,28 +372,37 @@ class Robot:
             start_point.time_from_start = 0.0
             path.add(start_point)
 
-            dq = np.abs(np.array(self.robot._joint_configuration) - np.array(point.joint_configuration))
+            dq = np.abs(
+                np.array(self.robot._joint_configuration)
+                - np.array(point.joint_configuration)
+            )
             point.time_from_start = np.max(dq) / self.speed
             path.add(point)
 
             trajectory = self.robot._generate_trajectory(path)
 
             return self.robot._send_trajectory(trajectory)
-        
+
         def set_velocities(self, velocities: Sequence[float]):
             msg = Float64MultiArray()
             msg.data = list(velocities)
             self.robot._velocity_controller_command_client.publish(msg)
-            
+
         def read(self, decimals: int = 5) -> "Robot.JointSpace.Point":
             if decimals is None:
                 joint_configuration = self.robot._joint_configuration
             else:
-                joint_configuration = np.round(self.robot._joint_configuration, decimals)
+                joint_configuration = np.round(
+                    self.robot._joint_configuration, decimals
+                )
             return Robot.JointSpace.Point(joint_configuration)
 
         class Point:
-            def __init__(self, joint_configuration: Sequence[float]= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0), time_from_start=None):
+            def __init__(
+                self,
+                joint_configuration: Sequence[float] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+                time_from_start=None,
+            ):
                 self.joint_configuration = list(joint_configuration)
                 self.time_from_start = time_from_start
 
@@ -355,7 +413,7 @@ class Robot:
                     for i, val in enumerate(self.joint_configuration)
                 ]
                 return "Robot.JointSpace.Point(\n  " + "\n  ".join(joints) + "\n)"
-            
+
             def __array__(self, dtype=None):
                 return np.array(self.joint_configuration, dtype=dtype)
 
@@ -371,12 +429,14 @@ class Robot:
 
             def __len__(self):
                 return len(self.points)
-            
+
             def __array__(self, dtype=None):
                 if not self.points:
                     return np.empty((0, 6), dtype=dtype)
-                return np.array([np.array(p, dtype=dtype) for p in self.points], dtype=dtype)
-            
+                return np.array(
+                    [np.array(p, dtype=dtype) for p in self.points], dtype=dtype
+                )
+
     class CartesianSpace:
 
         def __init__(self, robot_instance):
@@ -385,13 +445,15 @@ class Robot:
             self.angular_speed = 0.1
             self.linear_acceleration = 0.05
             self.interpolation_step_size = 0.01
-        
+
         def _robot_to_tcp(self):
             pos = np.array(self.robot._tcp_position, float)
             quat = np.array(self.robot._tcp_orientation, float)
 
             if np.linalg.norm(quat) == 0:
-                self.robot.node.get_logger().warn("_tcp_orientation quaternion must not be zero.")
+                self.robot.node.get_logger().warn(
+                    "_tcp_orientation quaternion must not be zero."
+                )
                 return np.eye(4)
 
             quat /= np.linalg.norm(quat)
@@ -400,7 +462,7 @@ class Robot:
             T[:3, :3] = R.from_quat(quat).as_matrix()
             T[:3, 3] = pos
             return T
-        
+
         def _tcp_to_robot(self):
             return np.linalg.inv(self._robot_to_tcp())
 
@@ -409,10 +471,10 @@ class Robot:
             quat = self.robot._robot_orientation
             quat /= np.linalg.norm(quat)
             T = np.eye(4)
-            T[:3,:3] = R.from_quat(quat).as_matrix()
+            T[:3, :3] = R.from_quat(quat).as_matrix()
             T[:3, 3] = pos
             return T
-        
+
         def _base_to_world(self):
             return np.linalg.inv(self._world_to_base())
 
@@ -429,16 +491,16 @@ class Robot:
             T[:3, :3] = interp_R
             T[:3, 3] = interp_p
             return T
-        
+
         def _trapezoidal_profile(self, distance, v_max, a_max, dt=0.001):
             s = []
             times = []
             t = 0.0
             pos = vel = 0.0
-            
+
             t_acc = v_max / a_max
             d_acc = 0.5 * a_max * t_acc**2
-            
+
             if 2 * d_acc > distance:
                 t_acc = np.sqrt(distance / a_max)
                 t_total = 2 * t_acc
@@ -446,7 +508,7 @@ class Robot:
                 d_cruise = distance - 2 * d_acc
                 t_cruise = d_cruise / v_max
                 t_total = 2 * t_acc + t_cruise
-            
+
             while t < t_total + 1e-6:
                 if t < t_acc:
                     pos = 0.5 * a_max * t**2
@@ -454,15 +516,20 @@ class Robot:
                     pos = d_acc + v_max * (t - t_acc)
                 else:
                     dt_dec = t - (t_total - t_acc)
-                    pos = distance - 0.5 * a_max * (t_acc - dt_dec)**2
+                    pos = distance - 0.5 * a_max * (t_acc - dt_dec) ** 2
                 s.append(pos)
                 times.append(t)
                 t += dt
             return s, times
 
-
-        def move(self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True):
-            start = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
+        def move(
+            self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True
+        ):
+            start = (
+                self._world_to_base()
+                @ forward_kinematics(self.robot._joint_configuration)
+                @ self._robot_to_tcp()
+            )
             end = pose.as_matrix()
 
             linear_dist = np.linalg.norm(start[:3, 3] - end[:3, 3])
@@ -479,7 +546,12 @@ class Robot:
             path = Robot.CartesianSpace.Path()
 
             if enforce_linearity:
-                s_profile, t_profile = self._trapezoidal_profile(effective_distance, v_max=self.linear_speed, a_max=self.linear_acceleration, dt=self.interpolation_step_size)
+                s_profile, t_profile = self._trapezoidal_profile(
+                    effective_distance,
+                    v_max=self.linear_speed,
+                    a_max=self.linear_acceleration,
+                    dt=self.interpolation_step_size,
+                )
 
                 for s, t in zip(s_profile, t_profile):
                     alpha = s / effective_distance if effective_distance > 1e-9 else 1.0
@@ -505,9 +577,9 @@ class Robot:
                 path.add(end_pose)
 
             return self.follow_path(path)
-        
+
         def follow_path(self, path: "Robot.CartesianSpace.Path"):
-            
+
             joint_space_path = Robot.JointSpace.Path()
 
             prev_joint_configuration = self.robot._joint_configuration
@@ -516,35 +588,47 @@ class Robot:
 
                 ik_solutions = inverse_kinematics(T)
                 if not ik_solutions:
-                    self.robot.node.get_logger().error(f"No IK solution found at pose {i}")
+                    self.robot.node.get_logger().error(
+                        f"No IK solution found at pose {i}"
+                    )
                     return False
-                prev_joint_configuration = chose_optimal_solution(prev_joint_configuration, ik_solutions)
+                prev_joint_configuration = chose_optimal_solution(
+                    prev_joint_configuration, ik_solutions
+                )
                 point = Robot.JointSpace.Point(prev_joint_configuration)
                 point.time_from_start = pose.time_from_start
                 joint_space_path.add(point)
 
-            offset = np.linalg.norm(np.array(joint_space_path.points[0]) - self.robot._joint_configuration)
+            offset = np.linalg.norm(
+                np.array(joint_space_path.points[0]) - self.robot._joint_configuration
+            )
 
-            if  offset > 1e-1:
+            if offset > 1e-1:
                 self.robot.node.get_logger().error("Robot not at start of path")
                 return False
 
             trajectory = self.robot._generate_trajectory(joint_space_path)
 
             return self.robot._send_trajectory(trajectory)
-                
+
         def read(self):
-            T = self._world_to_base() @ forward_kinematics(self.robot._joint_configuration) @ self._robot_to_tcp()
-            position= T[:3, 3]
+            T = (
+                self._world_to_base()
+                @ forward_kinematics(self.robot._joint_configuration)
+                @ self._robot_to_tcp()
+            )
+            position = T[:3, 3]
             orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
-            pose = Robot.CartesianSpace.Pose(
-                position,
-                orientation
-                )
+            pose = Robot.CartesianSpace.Pose(position, orientation)
             return pose
-        
+
         class Pose:
-            def __init__(self, position: Sequence[float]= (0.0, 0.0, 0.0), orientation: Sequence[float]= (0.0, 0.0, 0.0), time_from_start=None):
+            def __init__(
+                self,
+                position: Sequence[float] = (0.0, 0.0, 0.0),
+                orientation: Sequence[float] = (0.0, 0.0, 0.0),
+                time_from_start=None,
+            ):
                 self.position = list(position)
                 self.orientation = list(orientation)
                 self.time_from_start = time_from_start
@@ -552,17 +636,17 @@ class Robot:
             def as_matrix(self):
                 T = np.eye(4)
                 T[:3, 3] = np.array(self.position)
-                T[:3, :3] = R.from_euler('xyz', self.orientation).as_matrix()
+                T[:3, :3] = R.from_euler("xyz", self.orientation).as_matrix()
                 return T
-            
+
             @classmethod
             def from_matrix(cls, T: np.ndarray) -> "Robot.CartesianSpace.Pose":
                 if T.shape != (4, 4):
                     raise ValueError("Input must be a 4x4 homogeneous transform")
                 position = T[:3, 3]
-                orientation = R.from_matrix(T[:3, :3]).as_euler('xyz')
+                orientation = R.from_matrix(T[:3, :3]).as_euler("xyz")
                 return cls(position, orientation)
-            
+
             def __repr__(self):
                 position = np.round(self.position, 5)
                 orientation = np.round(self.orientation, 5)

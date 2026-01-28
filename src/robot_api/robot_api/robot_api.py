@@ -64,12 +64,12 @@ class Robot:
             JointState, "/joint_states", self._joint_states_callback, 10
         )
 
-        self._trajectory_client = ActionClient(
+        self._trajectory_controller_client = ActionClient(
             self.node,
             FollowJointTrajectory,
             "/joint_trajectory_controller/follow_joint_trajectory",
         )
-        self._velocity_controller_command_client = self.node.create_publisher(
+        self._velocity_controller_client = self.node.create_publisher(
             Float64MultiArray, "/velocity_forward_controller/commands", 10
         )
 
@@ -254,7 +254,7 @@ class Robot:
 
     def _send_trajectory(self, trajectory):
         self._use_trajectory_controller()
-        if not self._trajectory_client.wait_for_server(timeout_sec=5.0):
+        if not self._trajectory_controller_client.wait_for_server(timeout_sec=5.0):
             self.node.get_logger().error("FollowJointTrajectory server not available.")
             return False
 
@@ -281,7 +281,7 @@ class Robot:
                     f"Joint velocity error: [{formatted_vel_error}]"
                 )
 
-        send_goal_future = self._trajectory_client.send_goal_async(
+        send_goal_future = self._trajectory_controller_client.send_goal_async(
             fjt_goal, feedback_callback=feedback_callback
         )
         goal_handle = self._wait_for_future(send_goal_future).result()
@@ -393,7 +393,7 @@ class Robot:
             self.robot._use_velocity_controller()
             msg = Float64MultiArray()
             msg.data = list(velocities)
-            self.robot._velocity_controller_command_client.publish(msg)
+            self.robot._velocity_controller_client.publish(msg)
 
         def read(self, decimals: int = 5) -> "Robot.JointSpace.Point":
             if decimals is None:

@@ -51,7 +51,7 @@ class Robot:
 
         self._joint_names = [f"joint_{i+1}" for i in range(6)]
         self._joint_configuration = None
-        self._controller_type = "trajectory"
+        self._controller_type = None
         self._fake_hardware = False
 
         rclpy.init()
@@ -151,7 +151,7 @@ class Robot:
     def _use_velocity_controller(self) -> bool:
         if self._controller_type == "velocity":
             return True
-        elif self._switch_controllers(
+        if self._switch_controllers(
             start=["velocity_forward_controller"], stop=["joint_trajectory_controller"]
         ):
             self._controller_type = "velocity"
@@ -161,12 +161,13 @@ class Robot:
     def _use_trajectory_controller(self) -> bool:
         if self._controller_type == "trajectory":
             return True
-        elif self._switch_controllers(
+        if self._switch_controllers(
             start=["joint_trajectory_controller"], stop=["velocity_forward_controller"]
         ):
             self._controller_type = "trajectory"
             return True
         return False
+        
 
     def _joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -252,6 +253,7 @@ class Robot:
         return trajectory
 
     def _send_trajectory(self, trajectory):
+        self._use_trajectory_controller()
         if not self._trajectory_client.wait_for_server(timeout_sec=5.0):
             self.node.get_logger().error("FollowJointTrajectory server not available.")
             return False
@@ -388,6 +390,7 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
 
         def set_velocities(self, velocities: Sequence[float]):
+            self.robot._use_velocity_controller()
             msg = Float64MultiArray()
             msg.data = list(velocities)
             self.robot._velocity_controller_command_client.publish(msg)

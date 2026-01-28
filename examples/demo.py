@@ -1,4 +1,4 @@
-from robot_api import Robot
+from robot_api import Robot, JointSpace, CartesianSpace
 
 import math
 import numpy as np
@@ -32,7 +32,7 @@ def pick_and_place(robot):
     robot.tool_changer.attach_tool(robot.tools.gripper)
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)), False
+        CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)), False
     )
 
     robot.tools.gripper.set_distance(0.05)
@@ -40,7 +40,7 @@ def pick_and_place(robot):
     time.sleep(1)
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((START_X, START_Y, PICK_PLACE_HEIGHT), (0, 0, 0))
+        CartesianSpace.Pose((START_X, START_Y, PICK_PLACE_HEIGHT), (0, 0, 0))
     )
 
     robot.tools.gripper.set_distance(OBJECT_SIZE)
@@ -48,15 +48,15 @@ def pick_and_place(robot):
     time.sleep(1)
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0))
+        CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0))
     )
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0))
+        CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0))
     )
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((END_X, END_Y, PICK_PLACE_HEIGHT), (0, 0, 0))
+        CartesianSpace.Pose((END_X, END_Y, PICK_PLACE_HEIGHT), (0, 0, 0))
     )
 
     robot.tools.gripper.set_distance(0.05)
@@ -64,7 +64,7 @@ def pick_and_place(robot):
     time.sleep(1)
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0))
+        CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0))
     )
 
 
@@ -86,7 +86,7 @@ def sine(robot):
     robot.cartesian_space.acceleration = CARTESIAN_SPACE_ACCELERATION
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False
+        CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False
     )
 
     # Calculate total arc length of the sine wave path
@@ -159,7 +159,7 @@ def sine(robot):
         else:
             return 1.0
 
-    path = Robot.CartesianSpace.Path()
+    path = CartesianSpace.Path()
     for i in range(NUM_POINTS):
         t = (i / (NUM_POINTS - 1)) * total_time  # Actual time
         alpha = trapezoidal_profile(t)  # Position fraction with trapezoid profile
@@ -168,7 +168,7 @@ def sine(robot):
         x = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * alpha * NUM_PERIODS)
         z = Z0
 
-        pose = Robot.CartesianSpace.Pose(
+        pose = CartesianSpace.Pose(
             position=(x, y, z),
             orientation=(0, 0, 0),
             time_from_start=t,
@@ -191,11 +191,11 @@ def estop(robot):
     robot.cartesian_space.acceleration = CARTESIAN_SPACE_ACCELERATION
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False
+        CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False
     )
 
     robot.cartesian_space.move(
-        Robot.CartesianSpace.Pose((X0, Y0, Z0 - 0.01), (0, 0, 0)), False
+        CartesianSpace.Pose((X0, Y0, Z0 - 0.01), (0, 0, 0)), False
     )
 
 

@@ -1,1 +1,1 @@
-from .robot_api import Robot
+from .robot_api import Robot, JointSpace, CartesianSpace

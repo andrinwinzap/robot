@@ -26,7 +26,7 @@ def pick_and_place(robot):
     ########################################
 
     robot.joint_space.speed = JOINT_SPACE_SPEED
-    robot.cartesian_space.speed = CARTESIAN_SPACE_SPEED
+    robot.cartesian_space.linear_speed = CARTESIAN_SPACE_SPEED
     robot.cartesian_space.acceleration = CARTESIAN_SPACE_ACCELERATION
 
     robot.tool_changer.attach_tool(robot.tools.gripper)
@@ -82,7 +82,7 @@ def sine(robot):
     ########################################
 
     robot.joint_space.speed = JOINT_SPACE_SPEED
-    robot.cartesian_space.speed = CARTESIAN_SPACE_SPEED
+    robot.cartesian_space.linear_speed = CARTESIAN_SPACE_SPEED
     robot.cartesian_space.acceleration = CARTESIAN_SPACE_ACCELERATION
 
     robot.cartesian_space.move(
@@ -108,7 +108,7 @@ def sine(robot):
 
     # Calculate trapezoidal profile timing
     t_accel = (
-        robot.cartesian_space.speed / robot.cartesian_space.acceleration
+        robot.cartesian_space.linear_speed / robot.cartesian_space.acceleration
     )  # Time to reach max speed
     d_accel = (
         0.5 * robot.cartesian_space.acceleration * t_accel**2
@@ -128,9 +128,9 @@ def sine(robot):
     else:
         # Trapezoidal profile - reach max speed
         d_cruise = total_distance - 2 * d_accel
-        t_cruise = d_cruise / robot.cartesian_space.speed
+        t_cruise = d_cruise / robot.cartesian_space.linear_speed
         t_decel = t_accel
-        actual_max_speed = robot.cartesian_space.speed
+        actual_max_speed = robot.cartesian_space.linear_speed
 
     total_time = t_accel + t_cruise + t_decel
 
@@ -187,7 +187,7 @@ def estop(robot):
     ########################################
 
     robot.joint_space.speed = JOINT_SPACE_SPEED
-    robot.cartesian_space.speed = CARTESIAN_SPACE_SPEED
+    robot.cartesian_space.linear_speed = CARTESIAN_SPACE_SPEED
     robot.cartesian_space.acceleration = CARTESIAN_SPACE_ACCELERATION
 
     robot.cartesian_space.move(
@@ -217,7 +217,7 @@ def main():
     print("\nStarting Setup...")
 
     robot = Robot()
-    robot.set_fake_hardware(args.fake_hardware)
+    robot.set_fake_hardware_mode(args.fake_hardware)
     robot.set_debug_mode(args.debug)
 
     print("Setup Complete!")

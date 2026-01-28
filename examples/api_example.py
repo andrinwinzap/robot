@@ -5,7 +5,7 @@ from robot_api import Robot
 robot = Robot()
 
 # Set API Options
-robot.set_fake_hardware(False)
+robot.set_fake_hardware_mode(False)
 robot.set_debug_mode(False)
 
 # Set motion speeds

@@ -1,34 +1,34 @@
 import time
-
-import numpy as np
-
 from threading import Thread
-
 from typing import List, Sequence
 
-from scipy.spatial.transform import Rotation as R, Slerp
+import numpy as np
 from scipy.interpolate import CubicSpline
+from scipy.spatial.transform import Rotation as R, Slerp
 
 import rclpy
-
-from rclpy.node import Node
 from rclpy.action import ActionClient
-from rclpy.logging import LoggingSeverity
-
-from std_msgs.msg import Bool, Float32, Float64MultiArray
-from control_msgs.action import FollowJointTrajectory
-from sensor_msgs.msg import JointState
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from controller_manager_msgs.srv import SwitchController
-
-from rcl_interfaces.srv import SetParameters
-from rcl_interfaces.msg import Parameter, ParameterType
-from builtin_interfaces.msg import Duration
-
 from rclpy.executors import SingleThreadedExecutor
+from rclpy.logging import LoggingSeverity
+from rclpy.node import Node
 
-from robot_api.numeric_kinematics import *
+from builtin_interfaces.msg import Duration
+from control_msgs.action import FollowJointTrajectory
+from controller_manager_msgs.srv import SwitchController
+from rcl_interfaces.msg import Parameter, ParameterType
+from rcl_interfaces.srv import SetParameters
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool, Float32, Float64MultiArray
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
 import robot_api.config as config
+from robot_api.numeric_kinematics import (
+    forward_kinematics,
+    inverse_kinematics,
+    check_limits,
+    chose_optimal_solution,
+    jacobian_dls_pinv,
+)
 
 
 class Tool:
@@ -96,7 +96,7 @@ class Robot:
             time.sleep(0.001)
         self.node.get_logger().debug("First joint state received, robot ready.")
 
-    def set_fake_hardware(self, value):
+    def set_fake_hardware_mode(self, value):
         param = Parameter()
         param.name = "fake_hardware"
         param.value.type = ParameterType.PARAMETER_BOOL
@@ -169,7 +169,6 @@ class Robot:
             self._controller_type = "joint_trajectory_controller"
             return True
         return False
-        
 
     def _joint_states_callback(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
@@ -306,17 +305,17 @@ class Robot:
                 f"Controller failed with error code {result.error_code}"
             )
             return False
-        
+
+    def _send_joint_velocities(self, joint_velocities: Sequence[float]):
+        msg = Float64MultiArray()
+        msg.data = list(joint_velocities)
+        self._velocity_controller_client.publish(msg)
+
     def _wait_for_future(self, future):
         while rclpy.ok() and not future.done():
             time.sleep(0.001)
         return future
     
-    def _send_joint_velocities(self, joint_velocities: Sequence[float]):
-            msg = Float64MultiArray()
-            msg.data = list(joint_velocities)
-            self._velocity_controller_client.publish(msg)
-
     class ToolChanger:
         def __init__(self, robot_instance):
             self.robot = robot_instance
@@ -549,36 +548,22 @@ class Robot:
             trajectory = self.robot._generate_trajectory(joint_space_path)
 
             return self.robot._send_trajectory(trajectory)
-        
-        def twist(self, linear_velocity: Sequence[float], angular_velocity: Sequence[float]):
+
+        def twist(
+            self, linear_velocity: Sequence[float], angular_velocity: Sequence[float]
+        ):
             self._target_twist = np.hstack((linear_velocity, angular_velocity))
 
             if np.linalg.norm(self._target_twist) < 1e-4:
                 self._stop_twist_timer()
                 return
-            
+
             self.robot._use_velocity_controller()
             if not self._twist_active:
                 self._twist_active = True
-                self._twist_timer = self.robot.node.create_timer(0.01, self._twist_callback)
-
-        def _stop_twist_timer(self):
-            if not self._twist_active:
-                return
-            
-            self._target_twist = np.zeros(6)
-            if self._twist_timer:
-                self._twist_timer.destroy()
-                self._twist_timer = None
-            self._twist_active = False
-            self.robot._send_joint_velocities(np.zeros(6))
-
-        def _twist_callback(self):
-            joint_velocities = jacobian_dls_pinv(self.robot._joint_configuration) @ self._target_twist
-            joint_velocities = np.clip(joint_velocities, 
-                        -np.array(self.robot.joint_velocity_limits),
-                         np.array(self.robot.joint_velocity_limits))
-            self.robot._send_joint_velocities(joint_velocities)
+                self._twist_timer = self.robot.node.create_timer(
+                    0.01, self._twist_callback
+                )
 
         def read(self):
             T = (
@@ -667,6 +652,28 @@ class Robot:
                 t += dt
             return s, times
         
+        def _stop_twist_timer(self):
+            if not self._twist_active:
+                return
+
+            self._target_twist = np.zeros(6)
+            if self._twist_timer:
+                self._twist_timer.destroy()
+                self._twist_timer = None
+            self._twist_active = False
+            self.robot._send_joint_velocities(np.zeros(6))
+
+        def _twist_callback(self):
+            joint_velocities = (
+                jacobian_dls_pinv(self.robot._joint_configuration) @ self._target_twist
+            )
+            joint_velocities = np.clip(
+                joint_velocities,
+                -np.array(self.robot.joint_velocity_limits),
+                np.array(self.robot.joint_velocity_limits),
+            )
+            self.robot._send_joint_velocities(joint_velocities)
+
         class Pose:
             def __init__(
                 self,

@@ -149,22 +149,22 @@ class Robot:
         return resp.ok
 
     def _use_velocity_controller(self) -> bool:
-        if self._controller_type == "velocity":
+        if self._controller_type == "velocity_forward_controller":
             return True
         if self._switch_controllers(
             start=["velocity_forward_controller"], stop=["joint_trajectory_controller"]
         ):
-            self._controller_type = "velocity"
+            self._controller_type = "velocity_forward_controller"
             return True
         return False
 
     def _use_trajectory_controller(self) -> bool:
-        if self._controller_type == "trajectory":
+        if self._controller_type == "joint_trajectory_controller":
             return True
         if self._switch_controllers(
             start=["joint_trajectory_controller"], stop=["velocity_forward_controller"]
         ):
-            self._controller_type = "trajectory"
+            self._controller_type = "joint_trajectory_controller"
             return True
         return False
         

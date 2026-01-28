@@ -116,6 +116,7 @@ class Robot:
             self.node.get_logger().set_level(LoggingSeverity.INFO)
 
     def shutdown(self):
+        self.cartesian_space._stop_twist_timer()
         self._executor.shutdown()
         self._executor_thread.join()
         self.node.destroy_node()
@@ -161,6 +162,7 @@ class Robot:
     def _use_trajectory_controller(self) -> bool:
         if self._controller_type == "joint_trajectory_controller":
             return True
+        self.cartesian_space._stop_twist_timer()
         if self._switch_controllers(
             start=["joint_trajectory_controller"], stop=["velocity_forward_controller"]
         ):
@@ -309,6 +311,11 @@ class Robot:
         while rclpy.ok() and not future.done():
             time.sleep(0.001)
         return future
+    
+    def _send_joint_velocities(self, joint_velocities: Sequence[float]):
+            msg = Float64MultiArray()
+            msg.data = list(joint_velocities)
+            self._velocity_controller_client.publish(msg)
 
     class ToolChanger:
         def __init__(self, robot_instance):
@@ -391,9 +398,7 @@ class Robot:
 
         def set_velocities(self, velocities: Sequence[float]):
             self.robot._use_velocity_controller()
-            msg = Float64MultiArray()
-            msg.data = list(velocities)
-            self.robot._velocity_controller_client.publish(msg)
+            self.robot._send_joint_velocities(velocities)
 
         def read(self, decimals: int = 5) -> "Robot.JointSpace.Point":
             if decimals is None:
@@ -451,6 +456,10 @@ class Robot:
             self.max_angular_velocity = 0.1
             self.max_linear_acceleration = 0.05
             self.interpolation_step_size = 0.01
+
+            self._twist_timer = None
+            self._target_twist = np.zeros(6)
+            self._twist_active = False
 
         def move(
             self, pose: "Robot.CartesianSpace.Pose", enforce_linearity: bool = True
@@ -542,9 +551,34 @@ class Robot:
             return self.robot._send_trajectory(trajectory)
         
         def twist(self, linear_velocity: Sequence[float], angular_velocity: Sequence[float]):
-            twist = np.hstack((linear_velocity, angular_velocity))
-            joint_velocities = jacobian_dls_pinv(self.robot._joint_configuration) @ twist
-            self.robot.joint_space.set_velocities(joint_velocities)
+            self._target_twist = np.hstack((linear_velocity, angular_velocity))
+
+            if np.linalg.norm(self._target_twist) < 1e-4:
+                self._stop_twist_timer()
+                return
+            
+            self.robot._use_velocity_controller()
+            if not self._twist_active:
+                self._twist_active = True
+                self._twist_timer = self.robot.node.create_timer(0.01, self._twist_callback)
+
+        def _stop_twist_timer(self):
+            if not self._twist_active:
+                return
+            
+            self._target_twist = np.zeros(6)
+            if self._twist_timer:
+                self._twist_timer.destroy()
+                self._twist_timer = None
+            self._twist_active = False
+            self.robot._send_joint_velocities(np.zeros(6))
+
+        def _twist_callback(self):
+            joint_velocities = jacobian_dls_pinv(self.robot._joint_configuration) @ self._target_twist
+            joint_velocities = np.clip(joint_velocities, 
+                        -np.array(self.robot.joint_velocity_limits),
+                         np.array(self.robot.joint_velocity_limits))
+            self.robot._send_joint_velocities(joint_velocities)
 
         def read(self):
             T = (

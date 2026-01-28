@@ -366,7 +366,7 @@ class Robot:
     class JointSpace:
         def __init__(self, robot_instance):
             self.robot = robot_instance
-            self.speed = 1.0
+            self.max_joint_velocity = 1.0
 
         def move(self, point: "Robot.JointSpace.Point"):
             if not check_limits(point.joint_configuration):
@@ -382,7 +382,7 @@ class Robot:
                 np.array(self.robot._joint_configuration)
                 - np.array(point.joint_configuration)
             )
-            point.time_from_start = np.max(dq) / self.speed
+            point.time_from_start = np.max(dq) / self.max_joint_velocity
             path.add(point)
 
             trajectory = self.robot._generate_trajectory(path)
@@ -447,9 +447,9 @@ class Robot:
     class CartesianSpace:
         def __init__(self, robot_instance):
             self.robot = robot_instance
-            self.linear_speed = 0.05
-            self.angular_speed = 0.1
-            self.linear_acceleration = 0.05
+            self.max_linear_velocity = 0.05
+            self.max_angular_velocity = 0.1
+            self.max_linear_acceleration = 0.05
             self.interpolation_step_size = 0.01
 
         def move(
@@ -470,7 +470,7 @@ class Robot:
             rot_vec = R.from_matrix(R_diff).as_rotvec()
             angular_dist = np.linalg.norm(rot_vec)
 
-            weight_factor = self.linear_speed / self.angular_speed
+            weight_factor = self.max_linear_velocity / self.max_angular_velocity
             effective_distance = max(linear_dist, angular_dist * weight_factor)
 
             path = Robot.CartesianSpace.Path()
@@ -478,8 +478,8 @@ class Robot:
             if enforce_linearity:
                 s_profile, t_profile = self._trapezoidal_profile(
                     effective_distance,
-                    v_max=self.linear_speed,
-                    a_max=self.linear_acceleration,
+                    v_max=self.max_linear_velocity,
+                    a_max=self.max_linear_acceleration,
                     dt=self.interpolation_step_size,
                 )
 
@@ -496,8 +496,8 @@ class Robot:
 
                 end_pose = pose
 
-                time_linear = linear_dist / self.linear_speed
-                time_angular = angular_dist / self.angular_speed
+                time_linear = linear_dist / self.max_linear_velocity
+                time_angular = angular_dist / self.max_angular_velocity
 
                 total_duration = max(time_linear, time_angular)
 
@@ -540,6 +540,11 @@ class Robot:
             trajectory = self.robot._generate_trajectory(joint_space_path)
 
             return self.robot._send_trajectory(trajectory)
+        
+        def twist(self, linear_velocity: Sequence[float], angular_velocity: Sequence[float]):
+            twist = np.hstack((linear_velocity, angular_velocity))
+            joint_velocities = jacobian_dls_pinv(self.robot._joint_configuration) @ twist
+            self.robot.joint_space.set_velocities(joint_velocities)
 
         def read(self):
             T = (

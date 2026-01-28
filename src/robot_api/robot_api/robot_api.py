@@ -1,4 +1,8 @@
+import time
+
 import numpy as np
+
+from threading import Thread
 
 from typing import List, Sequence
 
@@ -20,6 +24,8 @@ from controller_manager_msgs.srv import SwitchController
 from rcl_interfaces.srv import SetParameters
 from rcl_interfaces.msg import Parameter, ParameterType
 from builtin_interfaces.msg import Duration
+
+from rclpy.executors import SingleThreadedExecutor
 
 from robot_api.numeric_kinematics import *
 import robot_api.config as config
@@ -79,9 +85,14 @@ class Robot:
         self.cartesian_space = self.CartesianSpace(self)
         self.joint_space = self.JointSpace(self)
 
+        self._executor = SingleThreadedExecutor()
+        self._executor.add_node(self.node)
+        self._executor_thread = Thread(target=self._executor.spin, daemon=True)
+        self._executor_thread.start()
+
         self.node.get_logger().debug("Waiting for first joint state...")
         while self._joint_configuration is None:
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            time.sleep(0.001)
         self.node.get_logger().debug("First joint state received, robot ready.")
 
     def set_fake_hardware(self, value):
@@ -92,8 +103,7 @@ class Robot:
         req = SetParameters.Request()
         req.parameters = [param]
         future = self._set_hardware_param_client.call_async(req)
-        rclpy.spin_until_future_complete(self.node, future)
-        resp = future.result()
+        resp = self._wait_for_future(future).result()
         if not resp.results[0].successful:
             raise RuntimeError("Failed to set simulation mode")
         self._fake_hardware = value
@@ -105,6 +115,8 @@ class Robot:
             self.node.get_logger().set_level(LoggingSeverity.INFO)
 
     def shutdown(self):
+        self._executor.shutdown()
+        self._executor_thread.join()
         self.node.destroy_node()
         rclpy.shutdown()
 
@@ -124,8 +136,7 @@ class Robot:
         req.strictness = strictness
 
         future = self._switch_controller_client.call_async(req)
-        rclpy.spin_until_future_complete(self.node, future)
-        resp = future.result()
+        resp = self._wait_for_future(future).result()
 
         if resp is None:
             self.node.get_logger().error("SwitchController call failed")
@@ -260,8 +271,7 @@ class Robot:
         send_goal_future = self._trajectory_client.send_goal_async(
             fjt_goal, feedback_callback=feedback_callback
         )
-        rclpy.spin_until_future_complete(self.node, send_goal_future)
-        goal_handle = send_goal_future.result()
+        goal_handle = self._wait_for_future(send_goal_future).result()
 
         if not goal_handle.accepted:
             self.node.get_logger().error("Trajectory rejected by controller.")
@@ -271,10 +281,7 @@ class Robot:
 
         # Wait for result while still spinning
         result_future = goal_handle.get_result_async()
-        while rclpy.ok() and not result_future.done():
-            rclpy.spin_once(self.node, timeout_sec=0.1)
-
-        result = result_future.result().result
+        result = self._wait_for_future(result_future).result().result
 
         if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
             self.node.get_logger().debug("Trajectory completed successfully.")
@@ -284,6 +291,11 @@ class Robot:
                 f"Controller failed with error code {result.error_code}"
             )
             return False
+        
+    def _wait_for_future(self, future):
+        while rclpy.ok() and not future.done():
+            time.sleep(0.001)
+        return future
 
     class ToolChanger:
         def __init__(self, robot_instance):

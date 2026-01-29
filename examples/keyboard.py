@@ -1,10 +1,18 @@
 import pygame
 import numpy as np
+import argparse
 from robot_api import Robot
+
+# --- ARGUMENT PARSING ---
+parser = argparse.ArgumentParser(description="Robot Command Center")
+parser.add_argument("--fake-hardware", action="store_true", help="Run in simulation mode")
+parser.add_argument("--debug", action="store_true", help="Enable robot debug logs")
+args = parser.parse_args()
 
 # --- ROBOT SETUP ---
 robot = Robot()
-robot.set_fake_hardware_mode(True)
+robot.set_fake_hardware_mode(args.fake_hardware)
+robot.set_debug_mode(args.debug)
 
 # --- UI CONSTANTS ---
 WIDTH, HEIGHT = 1150, 580
@@ -70,16 +78,15 @@ def main():
     big_font = pygame.font.SysFont("Arial", 18, bold=True)
     clock = pygame.time.Clock()
 
-    # Sliders moved to bottom-right area to avoid collision
     l_slider = Slider(460, 500, 300, 0.005, 0.1, 0.03, "Linear Speed (m/s)")
     a_slider = Slider(800, 500, 300, 0.1, 1.5, 0.5, "Angular Speed (rad/s)")
 
     btns = [
-        # Linear Star (WASD + Space/Shift)
+        # Linear
         AxisButton(120, 60, 60, 60, "+X"),  AxisButton(120, 190, 60, 60, "-X"),
         AxisButton(55, 125, 60, 60, "+Y"),  AxisButton(185, 125, 60, 60, "-Y"),
         AxisButton(300, 60, 65, 60, "+Z"),  AxisButton(300, 190, 65, 60, "-Z"),
-        # Rotation Star (Arrows + QE)
+        # Rotation
         AxisButton(120, 330, 60, 60, "+P"), AxisButton(120, 460, 60, 60, "-P"),
         AxisButton(55, 395, 60, 60, "+Yw"), AxisButton(185, 395, 60, 60, "-Yw"),
         AxisButton(300, 330, 65, 60, "+R"), AxisButton(300, 460, 65, 60, "-R")
@@ -87,8 +94,6 @@ def main():
 
     while True:
         screen.fill(BG_COLOR)
-        
-        # --- DATA READ ---
         pose = robot.cartesian_space.read()
         joint_pt = robot.joint_space.read()
         
@@ -99,7 +104,6 @@ def main():
             a_slider.handle_event(event)
             for b in btns: b.handle_event(event)
 
-        # --- INPUT PROCESSING ---
         keys = pygame.key.get_pressed()
         l_spd, a_spd = l_slider.value, a_slider.value
         key_states = [
@@ -127,10 +131,18 @@ def main():
 
         robot.cartesian_space.twist(tuple(lin_vel), tuple(ang_vel))
 
-        # --- DRAW PANELS ---
-        pygame.draw.rect(screen, PANEL_COLOR, (30, 50, 380, 220), border_radius=10) # Linear
-        pygame.draw.rect(screen, PANEL_COLOR, (30, 320, 380, 220), border_radius=10) # Rotation
-        pygame.draw.rect(screen, PANEL_COLOR, (440, 50, 680, 380), border_radius=10) # Telemetry
+        # --- DRAW ---
+        pygame.draw.rect(screen, PANEL_COLOR, (30, 50, 380, 220), border_radius=10)
+        pygame.draw.rect(screen, PANEL_COLOR, (30, 320, 380, 220), border_radius=10)
+        pygame.draw.rect(screen, PANEL_COLOR, (440, 50, 680, 380), border_radius=10)
+
+        # UI Info bar
+        mode_col = (50, 200, 255) if args.fake_hardware else (255, 100, 100)
+        mode_txt = "FAKE HARDWARE: ON" if args.fake_hardware else "REAL HARDWARE: ON"
+        screen.blit(big_font.render(mode_txt, True, mode_col), (880, 20))
+        
+        if args.debug:
+            screen.blit(font.render("DEBUG MODE: ENABLED", True, (255, 255, 0)), (460, 440))
 
         screen.blit(big_font.render("LINEAR (WASD)", True, (150, 150, 160)), (50, 20))
         screen.blit(big_font.render("ROTATION (Arrows)", True, (150, 150, 160)), (50, 290))
@@ -140,10 +152,8 @@ def main():
         l_slider.draw(screen, font)
         a_slider.draw(screen, font)
 
-        # --- DRAW TELEMETRY ---
-        # Cartesian Column
-        col1_x = 460
-        y_start = 80
+        # Data columns
+        col1_x, col2_x, y_start = 460, 780, 80
         c_lines = [
             ("CARTESIAN POSE", big_font, HEADER_COLOR),
             (f"X:     {pose.position[0]: .5f}", font, TEXT_COLOR),
@@ -153,18 +163,12 @@ def main():
             (f"Pitch: {pose.orientation[1]: .5f}", font, TEXT_COLOR),
             (f"Yaw:   {pose.orientation[2]: .5f}", font, TEXT_COLOR),
         ]
-
-        # Joint Column
-        col2_x = 780
         j_lines = [("JOINT SPACE", big_font, HEADER_COLOR)]
-        subscripts = "123456"
         for i, val in enumerate(joint_pt.joint_configuration):
-            j_lines.append((f"Joint {subscripts[i]} (θ): {val: .5f} rad", font, TEXT_COLOR))
+            j_lines.append((f"q{i+1}: {val: .5f} rad", font, TEXT_COLOR))
 
-        for i, (txt, f, c) in enumerate(c_lines):
-            screen.blit(f.render(txt, True, c), (col1_x, y_start + i*28))
-        for i, (txt, f, c) in enumerate(j_lines):
-            screen.blit(f.render(txt, True, c), (col2_x, y_start + i*28))
+        for i, (txt, f, c) in enumerate(c_lines): screen.blit(f.render(txt, True, c), (col1_x, y_start + i*28))
+        for i, (txt, f, c) in enumerate(j_lines): screen.blit(f.render(txt, True, c), (col2_x, y_start + i*28))
 
         pygame.display.flip()
         clock.tick(60)

@@ -1,0 +1,11 @@
+{
+    "url": "https://cad.onshape.com/documents/35244f3032e1dd11e6e40d38/w/2676beacbbaa0f4cb9c91f52/e/7d7502ae24965f3f1f7c776c",
+    "output_format": "urdf",
+    "color": [0.5, 0.5, 0.5, 1.0],
+    "assets_directory": ".assets",
+    "output_filename": "",
+    "robot_name": "gripper",
+    "merge_stls": true,
+    "add_dummy_base_link": true,
+    "include_configuration_suffix": false
+}

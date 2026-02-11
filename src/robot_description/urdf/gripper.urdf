@@ -1,0 +1,131 @@
+<robot name="gripper">
+  
+  <link name="base_link" />
+<link name="tool_mounting_plate">
+    <inertial>
+      <origin xyz="-0.080077 0.180021 0.0971925" rpy="0 0 0" />
+      <mass value="0.0326621" />
+      <inertia ixx="1.37113e-05" ixy="6.31e-10" ixz="-9.5087e-08" iyy="1.4848e-05" iyz="-5.26e-10" izz="1.94271e-05" />
+    </inertial>
+    
+    <visual>
+      <origin xyz="-0.080077 0.180021 0.0971925" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/tool_mounting_plate_visual.stl" />
+      </geometry>
+      <material name="tool_mounting_plate_parts_material">
+        <color rgba="0.5 0.5 0.5 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.080077 0.180021 0.0971925" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/tool_mounting_plate_collision.stl" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <link name="gripper_pinion">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="1e-09" />
+      <inertia ixx="1e-09" ixy="0" ixz="0" iyy="1e-09" iyz="0" izz="1e-09" />
+    </inertial>
+    
+    <visual>
+      <origin xyz="0.0791474 0.180024 0.128211" rpy="-3.14159 -0 -0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_pinion_visual.stl" />
+      </geometry>
+      <material name="gripper_pinion_parts_material">
+        <color rgba="nan nan nan nan" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.0791474 0.180024 0.128211" rpy="-3.14159 -0 -0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_pinion_collision.stl" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="gripper" type="revolute">
+    <origin xyz="-0.0791474 0.180024 0.128211" rpy="3.14159 -0 -0" />
+    <parent link="tool_mounting_plate" />
+    <child link="gripper_pinion" />
+    <axis xyz="0 0 1" />
+    <limit effort="10" velocity="10" lower="-3.14159" upper="0" />
+  </joint>
+  
+  <joint name="base_link_to_tool_mounting_plate" type="fixed">
+    <origin xyz="0 0 0" rpy="0 -0 0" />
+    <parent link="base_link" />
+    <child link="tool_mounting_plate" />
+    <axis xyz="0 0 1" />
+    <limit effort="10" velocity="10" />
+  </joint>
+  
+  <link name="gripper_slider">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="1e-09" />
+      <inertia ixx="1e-09" ixy="0" ixz="0" iyy="1e-09" iyz="0" izz="1e-09" />
+    </inertial>
+    
+    <visual>
+      <origin xyz="0 0 0" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_slider_visual.stl" />
+      </geometry>
+      <material name="gripper_slider_parts_material">
+        <color rgba="nan nan nan nan" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_slider_collision.stl" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="base_link_to_gripper_slider" type="fixed">
+    <origin xyz="0 0 0" rpy="0 -0 0" />
+    <parent link="base_link" />
+    <child link="gripper_slider" />
+    <axis xyz="0 0 1" />
+    <limit effort="10" velocity="10" />
+  </joint>
+  
+  <link name="gripper_slider_2">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="1e-09" />
+      <inertia ixx="1e-09" ixy="0" ixz="0" iyy="1e-09" iyz="0" izz="1e-09" />
+    </inertial>
+    
+    <visual>
+      <origin xyz="0 0 0" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_slider_2_visual.stl" />
+      </geometry>
+      <material name="gripper_slider_2_parts_material">
+        <color rgba="nan nan nan nan" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 -0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/gripper_slider_2_collision.stl" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="base_link_to_gripper_slider_2" type="fixed">
+    <origin xyz="0 0 0" rpy="0 -0 0" />
+    <parent link="base_link" />
+    <child link="gripper_slider_2" />
+    <axis xyz="0 0 1" />
+    <limit effort="10" velocity="10" />
+  </joint>
+</robot>

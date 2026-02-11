@@ -49,6 +49,13 @@ def generate_launch_description():
         parameters=[robot_description],
     )
 
+    tool_manager_node = Node(
+        package='robot_bringup',
+        executable='tool_manager.py',
+        name='tool_manager',
+        output='screen',
+    )
+    
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",
         executable="spawner",
@@ -99,6 +106,7 @@ def generate_launch_description():
         declare_microros_arg,
         control_node,
         robot_state_pub_node,
+        tool_manager_node,
         joint_state_broadcaster_spawner,
         joint_trajectory_controller_spawner,
         velocity_forward_controller_spawner,

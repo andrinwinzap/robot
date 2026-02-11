@@ -1,11 +1,19 @@
 from launch import LaunchDescription
-from launch.substitutions import Command, FindExecutable, PathJoinSubstitution
+from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import UnlessCondition
 
 def generate_launch_description():
-    # Get URDF via xacro
+    deactivate_microros_agents = LaunchConfiguration("deactivate_microros_agents")
+
+    declare_microros_arg = DeclareLaunchArgument(
+        "deactivate_microros_agents",
+        default_value="false",
+        description="Deactivate micro-ROS agents",
+    )
+
     robot_description_content = Command([
         PathJoinSubstitution([FindExecutable(name="xacro")]),
         " ",
@@ -73,7 +81,8 @@ def generate_launch_description():
             executable="micro_ros_agent",
             name=f"agent_usb{i}",
             output="screen",
-            arguments=["serial", "--dev", dev, "-b", "921600", "-v4"]
+            arguments=["serial", "--dev", dev, "-b", "921600", "-v4"],
+            condition=UnlessCondition(deactivate_microros_agents),
         )
         for i, dev in enumerate([
             "/dev/ttyUSB0",
@@ -87,6 +96,7 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
+        declare_microros_arg,
         control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,

@@ -12,3 +12,34 @@ The 3D model is available on [Onshape](https://cad.onshape.com/documents/35244f3
 - [Gripper](https://github.com/andrinwinzap/robot-gripper)
 - [AS5600 Library](https://github.com/andrinwinzap/as5600_espidf_component)
 - [PID Library](https://github.com/andrinwinzap/pid_espidf_component)
+
+## Usage
+
+### Launch the Robot (ROS 2)
+
+Launch the complete system:
+
+```bash
+ros2 launch robot_bringup robot.launch.py
+```
+
+Launch without starting micro-ROS agents:
+
+```bash
+ros2 launch robot_bringup robot.launch.py deactivate_microros_agents:=true
+```
+
+
+### Keyboard Control
+
+Start the keyboard control interface:
+
+```bash
+python3 -m robot_api.keyboard
+```
+
+Run with simulated hardware:
+
+```bash
+python3 -m robot_api.keyboard --fake-hardware
+```

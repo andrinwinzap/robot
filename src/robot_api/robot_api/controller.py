@@ -20,6 +20,9 @@ BG_COLOR = (15, 15, 18)
 PANEL_COLOR = (28, 28, 33)
 TEXT_COLOR = (240, 240, 240)
 HEADER_COLOR = (0, 255, 150)
+GRIPPER_MIN = 0.0
+GRIPPER_MAX = 1.0
+GRIPPER_SPEED = 1.2  # units/s in [GRIPPER_MIN, GRIPPER_MAX]
 
 def apply_deadzone(value, deadzone=0.1):
     return value if abs(value) > deadzone else 0.0
@@ -43,6 +46,14 @@ def main():
     # Speed Multipliers
     L_SPD = 0.05  # Linear m/s
     A_SPD = 0.6   # Angular rad/s
+    gripper_pos = 0.0
+    last_sent_gripper_pos = None
+
+    # Ensure gripper command path is available.
+    try:
+        robot.tool_changer.attach_tool(robot.tools.gripper)
+    except Exception as e:
+        robot.node.get_logger().warn(f"Failed to attach gripper tool: {e}")
 
     while True:
         screen.fill(BG_COLOR)
@@ -72,8 +83,31 @@ def main():
             if dpad[0] != 0: # D-pad Left/Right
                 ang_vel[0] = dpad[0] * A_SPD # Roll
 
+            # Shoulder buttons: open/close gripper.
+            # Typical PS-style mapping: L1=4, R1=5.
+            if joystick.get_numbuttons() > 5:
+                if joystick.get_button(4):
+                    gripper_pos += GRIPPER_SPEED * (clock.get_time() / 1000.0)
+                if joystick.get_button(5):
+                    gripper_pos -= GRIPPER_SPEED * (clock.get_time() / 1000.0)
+
+        keys = pygame.key.get_pressed()
+        # Keyboard fallback for gripper control.
+        if keys[pygame.K_o]:
+            gripper_pos += GRIPPER_SPEED * (clock.get_time() / 1000.0)
+        if keys[pygame.K_p]:
+            gripper_pos -= GRIPPER_SPEED * (clock.get_time() / 1000.0)
+        gripper_pos = float(np.clip(gripper_pos, GRIPPER_MIN, GRIPPER_MAX))
+
         # Execute movement
         robot.cartesian_space.twist(tuple(lin_vel), tuple(ang_vel))
+        if last_sent_gripper_pos is None or abs(gripper_pos - last_sent_gripper_pos) > 1e-3:
+            try:
+                robot.tools.gripper.set_distance(gripper_pos)
+                last_sent_gripper_pos = gripper_pos
+            except RuntimeError:
+                # Gripper not attached as current tool.
+                pass
 
         # --- DRAW INTERFACE ---
         pose = robot.cartesian_space.read()
@@ -90,7 +124,10 @@ def main():
             "R-Stick Vert:  Forward / Back",
             "R-Stick Horiz: Side-to-Side",
             "D-Pad Vert:    Pitch",
-            "D-Pad Horiz:   Roll"
+            "D-Pad Horiz:   Roll",
+            "L1/R1:         Gripper Open/Close",
+            "O/P keys:      Gripper Open/Close",
+            f"Gripper Cmd:   {gripper_pos: .3f}"
         ]
         for i, text in enumerate(controls):
             screen.blit(font.render(text, True, TEXT_COLOR), (60, 110 + i*30))

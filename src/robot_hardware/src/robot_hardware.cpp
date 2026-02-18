@@ -71,6 +71,8 @@ namespace robot_hardware
       state_subscribers_.resize(num_joints);
 
       RCLCPP_INFO(node_->get_logger(), "Initializing hardware interface with %zu joints", num_joints);
+      
+      auto qos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
 
       // Create publishers and subscribers for each joint
       for (size_t i = 0; i < num_joints; i++)
@@ -80,13 +82,13 @@ namespace robot_hardware
         // Command publisher
         std::string cmd_topic = "/robot/" + joint_name + "/send_command";
         command_publishers_[i] =
-            node_->create_publisher<std_msgs::msg::Float32MultiArray>(cmd_topic, 10);
+            node_->create_publisher<std_msgs::msg::Float32MultiArray>(cmd_topic, qos);
 
         // State subscriber
         std::string get_state_topic = "/robot/" + joint_name + "/get_state"; // <-- this was missing
         state_subscribers_[i] =
             node_->create_subscription<std_msgs::msg::Float32MultiArray>(
-                get_state_topic, 10,
+                get_state_topic, qos,
                 [this, i, joint_name](const std_msgs::msg::Float32MultiArray::SharedPtr msg)
                 {
                   if (msg->data.size() >= 2)

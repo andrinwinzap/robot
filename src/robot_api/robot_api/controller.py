@@ -21,8 +21,8 @@ PANEL_COLOR = (28, 28, 33)
 TEXT_COLOR = (240, 240, 240)
 HEADER_COLOR = (0, 255, 150)
 GRIPPER_MIN = 0.0
-GRIPPER_MAX = 1.0
-GRIPPER_SPEED = 1.2  # units/s in [GRIPPER_MIN, GRIPPER_MAX]
+GRIPPER_MAX = 0.05
+GRIPPER_SPEED = 0.1  # units/s in [GRIPPER_MIN, GRIPPER_MAX]
 
 def apply_deadzone(value, deadzone=0.1):
     return value if abs(value) > deadzone else 0.0
@@ -86,9 +86,9 @@ def main():
             # Shoulder buttons: open/close gripper.
             # Typical PS-style mapping: L1=4, R1=5.
             if joystick.get_numbuttons() > 5:
-                if joystick.get_button(4):
+                if joystick.get_button(6):
                     gripper_pos += GRIPPER_SPEED * (clock.get_time() / 1000.0)
-                if joystick.get_button(5):
+                if joystick.get_button(7):
                     gripper_pos -= GRIPPER_SPEED * (clock.get_time() / 1000.0)
 
         keys = pygame.key.get_pressed()
@@ -101,7 +101,7 @@ def main():
 
         # Execute movement
         robot.cartesian_space.twist(tuple(lin_vel), tuple(ang_vel))
-        if last_sent_gripper_pos is None or abs(gripper_pos - last_sent_gripper_pos) > 1e-3:
+        if last_sent_gripper_pos is None or abs(gripper_pos - last_sent_gripper_pos) > 1e-4:
             try:
                 robot.tools.gripper.set_distance(gripper_pos)
                 last_sent_gripper_pos = gripper_pos

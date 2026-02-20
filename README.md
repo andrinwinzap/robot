@@ -35,11 +35,11 @@ ros2 launch robot_bringup robot.launch.py deactivate_microros_agents:=true
 Start the keyboard control interface:
 
 ```bash
-python3 -m robot_api.keyboard
+python3 -m robot_api.gui
 ```
 
 Run with simulated hardware:
 
 ```bash
-python3 -m robot_api.keyboard --fake-hardware
+python3 -m robot_api.gui --fake-hardware
 ```

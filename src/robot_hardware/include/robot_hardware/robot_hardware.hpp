@@ -54,6 +54,14 @@ namespace robot_hardware
 
     return_type write(const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
+    return_type prepare_command_mode_switch(
+        const std::vector<std::string> &start_interfaces,
+        const std::vector<std::string> &stop_interfaces) override;
+
+    return_type perform_command_mode_switch(
+        const std::vector<std::string> &start_interfaces,
+        const std::vector<std::string> &stop_interfaces) override;
+
   private:
     // ROS 2 Node handle for publishers and subscribers
     rclcpp::Node::SharedPtr node_;
@@ -66,12 +74,15 @@ namespace robot_hardware
     std::vector<double> joint_positions_;
     std::vector<double> joint_velocities_;
     std::vector<double> joint_commands_;
+    std::vector<double> integrated_position_commands_;
+    std::vector<bool> integrated_position_initialized_;
 
     // Mutex to protect concurrent access to joint_positions_ and joint_velocities_
     std::mutex joint_state_mutex_;
 
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
     std::atomic<bool> fake_hardware_;
+    std::atomic<bool> velocity_control_mode_;
 
     // Thread for spinning the ROS node
     std::thread spin_thread_;

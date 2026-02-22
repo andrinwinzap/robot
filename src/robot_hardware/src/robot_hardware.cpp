@@ -17,9 +17,26 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
+#include <algorithm>
 
 namespace robot_hardware
 {
+  namespace
+  {
+    bool has_interface_type(const std::vector<std::string> &interfaces, const char *type)
+    {
+      const std::string suffix = std::string("/") + type;
+      for (const auto &iface : interfaces)
+      {
+        if (iface.size() >= suffix.size() &&
+            iface.compare(iface.size() - suffix.size(), suffix.size(), suffix) == 0)
+        {
+          return true;
+        }
+      }
+      return false;
+    }
+  } // namespace
 
   CallbackReturn RobotSystem::on_init(const hardware_interface::HardwareInfo &info)
   {
@@ -38,6 +55,8 @@ namespace robot_hardware
 
       fake_hardware_.store(
           node_->declare_parameter<bool>("fake_hardware", false));
+      velocity_control_mode_.store(
+          node_->declare_parameter<bool>("velocity_control_mode", false));
 
       param_callback_handle_ = node_->add_on_set_parameters_callback(
           [this](const std::vector<rclcpp::Parameter> &params)
@@ -53,6 +72,13 @@ namespace robot_hardware
                             "fake_hardware changed to: %s",
                             fake_hardware_.load() ? "true" : "false");
               }
+              else if (p.get_name() == "velocity_control_mode")
+              {
+                velocity_control_mode_.store(p.as_bool());
+                RCLCPP_INFO(node_->get_logger(),
+                            "velocity_control_mode changed to: %s",
+                            velocity_control_mode_.load() ? "true" : "false");
+              }
             }
             return result;
           });
@@ -67,6 +93,8 @@ namespace robot_hardware
       joint_positions_.resize(num_joints, 0.0);
       joint_velocities_.resize(num_joints, 0.0);
       joint_commands_.resize(num_joints, 0.0);
+      integrated_position_commands_.resize(num_joints, 0.0);
+      integrated_position_initialized_.resize(num_joints, false);
       command_publishers_.resize(num_joints);
       state_subscribers_.resize(num_joints);
 
@@ -132,6 +160,9 @@ namespace robot_hardware
         vel = 0.0;
       for (auto &cmd : joint_commands_)
         cmd = 0.0;
+      for (auto &integrated_cmd : integrated_position_commands_)
+        integrated_cmd = 0.0;
+      std::fill(integrated_position_initialized_.begin(), integrated_position_initialized_.end(), false);
     }
 
     // Reset ros2_control interfaces
@@ -230,10 +261,11 @@ namespace robot_hardware
     return return_type::OK;
   }
 
-  return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+  return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration &period)
   {
     if (!fake_hardware_.load())
     {
+      const bool velocity_control_mode = velocity_control_mode_.load();
       // Send ros2_control joint commands (position and velocity) to micro-ROS topics
       for (size_t i = 0; i < info_.joints.size(); i++)
       {
@@ -242,6 +274,23 @@ namespace robot_hardware
         const std::string vel_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
         double position_cmd = get_command(pos_cmd_name);
         double velocity_cmd = get_command(vel_cmd_name);
+
+        if (velocity_control_mode)
+        {
+          if (!integrated_position_initialized_[i])
+          {
+            std::lock_guard<std::mutex> lock(joint_state_mutex_);
+            integrated_position_commands_[i] = joint_positions_[i];
+            integrated_position_initialized_[i] = true;
+          }
+
+          integrated_position_commands_[i] += velocity_cmd * period.seconds();
+          position_cmd = integrated_position_commands_[i];
+        }
+        else
+        {
+          integrated_position_initialized_[i] = false;
+        }
 
         // Pack commands into a Float32MultiArray
         std_msgs::msg::Float32MultiArray msg;
@@ -254,10 +303,43 @@ namespace robot_hardware
 
         // For debugging
         RCLCPP_DEBUG(node_->get_logger(),
-                     "Commanding joint %s: position %.3f, velocity %.3f",
-                     info_.joints[i].name.c_str(), position_cmd, velocity_cmd);
+                     "Commanding joint %s: position %.3f, velocity %.3f (velocity_control_mode=%s, dt=%.4f)",
+                     info_.joints[i].name.c_str(), position_cmd, velocity_cmd,
+                     velocity_control_mode ? "true" : "false", period.seconds());
       }
     }
+    return return_type::OK;
+  }
+
+  return_type RobotSystem::prepare_command_mode_switch(
+      const std::vector<std::string> & /*start_interfaces*/,
+      const std::vector<std::string> & /*stop_interfaces*/)
+  {
+    return return_type::OK;
+  }
+
+  return_type RobotSystem::perform_command_mode_switch(
+      const std::vector<std::string> &start_interfaces,
+      const std::vector<std::string> & /*stop_interfaces*/)
+  {
+    const bool has_velocity = has_interface_type(start_interfaces, hardware_interface::HW_IF_VELOCITY);
+    const bool has_position = has_interface_type(start_interfaces, hardware_interface::HW_IF_POSITION);
+
+    // Auto-enable for velocity-only controllers (e.g. forward command controller),
+    // and auto-disable when position interfaces are started (e.g. trajectory controller).
+    if (has_velocity && !has_position)
+    {
+      velocity_control_mode_.store(true);
+      RCLCPP_INFO(node_->get_logger(),
+                  "Auto-enabled velocity_control_mode (velocity-only command interfaces started)");
+    }
+    else if (has_position)
+    {
+      velocity_control_mode_.store(false);
+      RCLCPP_INFO(node_->get_logger(),
+                  "Auto-disabled velocity_control_mode (position command interfaces started)");
+    }
+
     return return_type::OK;
   }
 

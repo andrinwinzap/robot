@@ -57,6 +57,6 @@ class ToolChanger:
         if not self.robot._fake_hardware:
             self._command_publisher.publish(msg)
 
-        self.robot._tcp_position = (0, 0, 0)
-        self.robot._tcp_orientation = (0, 0, 0, 0)
+        self.robot._tcp_position = (0.0, 0.0, 0.0)
+        self.robot._tcp_orientation = (1.0, 0.0, 0.0, 0.0)
         self.current_tool = None

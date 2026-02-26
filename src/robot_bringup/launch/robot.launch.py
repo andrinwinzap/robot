@@ -61,10 +61,10 @@ def generate_launch_description():
         arguments=["joint_trajectory_controller"],
     )
 
-    velocity_forward_controller_spawner = Node(
+    joint_velocity_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["velocity_forward_controller", "--inactive"],
+        arguments=["joint_velocity_controller", "--inactive"],
     )
 
     rviz_node = Node(
@@ -101,7 +101,7 @@ def generate_launch_description():
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         joint_trajectory_controller_spawner,
-        velocity_forward_controller_spawner,
+        joint_velocity_controller_spawner,
         rviz_node,
         *microros_agents
     ])

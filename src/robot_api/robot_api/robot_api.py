@@ -58,7 +58,7 @@ class Robot:
             "/joint_trajectory_controller/follow_joint_trajectory",
         )
         self._velocity_controller_client = self.node.create_publisher(
-            Float64MultiArray, "/velocity_forward_controller/commands", 10
+            Float64MultiArray, "/joint_velocity_controller/commands", 10
         )
 
         self._set_hardware_param_client = self.node.create_client(
@@ -138,12 +138,12 @@ class Robot:
         return resp.ok
 
     def _use_velocity_controller(self) -> bool:
-        if self._controller_type == "velocity_forward_controller":
+        if self._controller_type == "joint_velocity_controller":
             return True
         if self._switch_controllers(
-            start=["velocity_forward_controller"], stop=["joint_trajectory_controller"]
+            start=["joint_velocity_controller"], stop=["joint_trajectory_controller"]
         ):
-            self._controller_type = "velocity_forward_controller"
+            self._controller_type = "joint_velocity_controller"
             return True
         return False
 
@@ -152,7 +152,7 @@ class Robot:
             return True
         self.cartesian_space._stop_twist_timer()
         if self._switch_controllers(
-            start=["joint_trajectory_controller"], stop=["velocity_forward_controller"]
+            start=["joint_trajectory_controller"], stop=["joint_velocity_controller"]
         ):
             self._controller_type = "joint_trajectory_controller"
             return True

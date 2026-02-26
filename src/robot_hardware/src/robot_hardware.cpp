@@ -38,9 +38,10 @@ namespace robot_hardware
     }
   } // namespace
 
-  CallbackReturn RobotSystem::on_init(const hardware_interface::HardwareInfo &info)
+  CallbackReturn RobotSystem::on_init(
+      const hardware_interface::HardwareComponentInterfaceParams &params)
   {
-    if (hardware_interface::SystemInterface::on_init(info) != CallbackReturn::SUCCESS)
+    if (hardware_interface::SystemInterface::on_init(params) != CallbackReturn::SUCCESS)
     {
       return CallbackReturn::ERROR;
     }
@@ -231,7 +232,7 @@ namespace robot_hardware
     return CallbackReturn::SUCCESS;
   }
 
-  return_type RobotSystem::read(const rclcpp::Time & /*time*/, const rclcpp::Duration &period)
+  return_type RobotSystem::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
   {
     // Copy current micro-ROS joint positions and velocities into ros2_control joint state interfaces
     std::lock_guard<std::mutex> lock(joint_state_mutex_);
@@ -249,7 +250,7 @@ namespace robot_hardware
       else
       {
         set_state(vel_name, get_command(vel_name));
-        set_state(pos_name, get_state(pos_name) + get_state(vel_name) * period.seconds());
+        set_state(pos_name, get_command(pos_name));
       }
 
       // For debugging - can be removed in production
@@ -263,35 +264,51 @@ namespace robot_hardware
 
   return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration &period)
   {
-    if (!fake_hardware_.load())
-    {
-      const bool velocity_control_mode = velocity_control_mode_.load();
-      // Send ros2_control joint commands (position and velocity) to micro-ROS topics
-      for (size_t i = 0; i < info_.joints.size(); i++)
-      {
-        // Fetch commands from ros2_control for position and velocity
-        const std::string pos_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
-        const std::string vel_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
-        double position_cmd = get_command(pos_cmd_name);
-        double velocity_cmd = get_command(vel_cmd_name);
+    const bool fake_hardware = fake_hardware_.load();
+    const bool velocity_control_mode = velocity_control_mode_.load();
 
-        if (velocity_control_mode)
+    // Always process commands so fake hardware can evolve position from velocity commands.
+    for (size_t i = 0; i < info_.joints.size(); i++)
+    {
+      // Fetch commands from ros2_control for position and velocity
+      const std::string pos_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
+      const std::string vel_cmd_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY;
+      double position_cmd = get_command(pos_cmd_name);
+      double velocity_cmd = get_command(vel_cmd_name);
+
+      if (velocity_control_mode)
+      {
+        if (!integrated_position_initialized_[i])
         {
-          if (!integrated_position_initialized_[i])
+          if (fake_hardware)
+          {
+            integrated_position_commands_[i] = get_state(pos_cmd_name);
+          }
+          else
           {
             std::lock_guard<std::mutex> lock(joint_state_mutex_);
             integrated_position_commands_[i] = joint_positions_[i];
-            integrated_position_initialized_[i] = true;
           }
-
-          integrated_position_commands_[i] += velocity_cmd * period.seconds();
-          position_cmd = integrated_position_commands_[i];
+          integrated_position_initialized_[i] = true;
         }
-        else
+
+        integrated_position_commands_[i] += velocity_cmd * period.seconds();
+        position_cmd = integrated_position_commands_[i];
+
+        // In fake hardware mode, read() mirrors the position command directly.
+        // Write the integrated value back so position progresses from velocity commands.
+        if (fake_hardware)
         {
-          integrated_position_initialized_[i] = false;
+          set_command(pos_cmd_name, position_cmd);
         }
+      }
+      else
+      {
+        integrated_position_initialized_[i] = false;
+      }
 
+      if (!fake_hardware)
+      {
         // Pack commands into a Float32MultiArray
         std_msgs::msg::Float32MultiArray msg;
         msg.data.resize(2);
@@ -308,6 +325,7 @@ namespace robot_hardware
                      velocity_control_mode ? "true" : "false", period.seconds());
       }
     }
+
     return return_type::OK;
   }
 

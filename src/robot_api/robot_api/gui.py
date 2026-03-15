@@ -36,12 +36,19 @@ GRIPPER_SPEED = 0.1  # units/s in [GRIPPER_MIN, GRIPPER_MAX]
 LIN_SPD_MIN = 0.01
 LIN_SPD_MAX = 0.25
 LIN_SPD_STEP = 0.01
+LIN_SPD_DEFAULT = 0.03
 ANG_SPD_MIN = 0.1
 ANG_SPD_MAX = 2.0
 ANG_SPD_STEP = 0.05
-ACCEL_MIN = 0.05
-ACCEL_MAX = 5.0
-ACCEL_STEP = 0.05
+ANG_SPD_DEFAULT = 0.2
+LIN_ACCEL_MIN = 0.05
+LIN_ACCEL_MAX = 0.1
+LIN_ACCEL_STEP = 0.01
+LIN_ACCEL_DEFAULT = 0.05
+ANG_ACCEL_MIN = 0.05
+ANG_ACCEL_MAX = 0.1
+ANG_ACCEL_STEP = 0.05
+ANG_ACCEL_DEFAULT = 0.2
 
 
 MAPPINGS = {
@@ -217,10 +224,10 @@ def main():
     clock = pygame.time.Clock()
 
     # Speed Multipliers
-    l_spd = 0.05  # Linear m/s
-    a_spd = 0.6  # Angular rad/s
-    max_lin_accel = 0.8
-    max_ang_accel = 0.8
+    l_spd = LIN_SPD_DEFAULT  # Linear m/s
+    a_spd = ANG_SPD_DEFAULT  # Angular rad/s
+    max_lin_accel = LIN_ACCEL_DEFAULT
+    max_ang_accel = ANG_ACCEL_DEFAULT
     fake_mode = args.fake_hardware
     gripper_pos = 0.0
     last_sent_gripper_pos = None
@@ -383,16 +390,16 @@ def main():
                     a_spd = clamp(a_spd + ANG_SPD_STEP, ANG_SPD_MIN, ANG_SPD_MAX)
                     handled_click = True
                 if not handled_click and lin_accel_dec_rect.collidepoint(event.pos):
-                    max_lin_accel = clamp(max_lin_accel - ACCEL_STEP, ACCEL_MIN, ACCEL_MAX)
+                    max_lin_accel = clamp(max_lin_accel - LIN_ACCEL_STEP, LIN_ACCEL_MIN, LIN_ACCEL_MAX)
                     handled_click = True
                 if not handled_click and lin_accel_inc_rect.collidepoint(event.pos):
-                    max_lin_accel = clamp(max_lin_accel + ACCEL_STEP, ACCEL_MIN, ACCEL_MAX)
+                    max_lin_accel = clamp(max_lin_accel + LIN_ACCEL_STEP, LIN_ACCEL_MIN, LIN_ACCEL_MAX)
                     handled_click = True
                 if not handled_click and ang_accel_dec_rect.collidepoint(event.pos):
-                    max_ang_accel = clamp(max_ang_accel - ACCEL_STEP, ACCEL_MIN, ACCEL_MAX)
+                    max_ang_accel = clamp(max_ang_accel - ANG_ACCEL_STEP, ANG_ACCEL_MIN, ANG_ACCEL_MAX)
                     handled_click = True
                 if not handled_click and ang_accel_inc_rect.collidepoint(event.pos):
-                    max_ang_accel = clamp(max_ang_accel + ACCEL_STEP, ACCEL_MIN, ACCEL_MAX)
+                    max_ang_accel = clamp(max_ang_accel + ANG_ACCEL_STEP, ANG_ACCEL_MIN, ANG_ACCEL_MAX)
                     handled_click = True
                 if not handled_click and tool_mode_prev_rect.collidepoint(event.pos):
                     tool_mode = "detach" if tool_mode == "attach" else "attach"

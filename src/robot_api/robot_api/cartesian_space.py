@@ -225,11 +225,13 @@ class CartesianSpace:
         joint_velocities = (
             jacobian_dls_pinv(self.robot._joint_configuration) @ self._target_twist
         )
-        joint_velocities = np.clip(
-            joint_velocities,
-            -np.array(self.robot.joint_velocity_limits),
-            np.array(self.robot.joint_velocity_limits),
-        )
+
+        limits = np.array(self.robot.joint_velocity_limits)
+
+        scale = np.max(np.abs(joint_velocities) / limits)
+        if scale > 1.0:
+            joint_velocities = joint_velocities / scale
+
         self.robot._send_joint_velocities(joint_velocities)
 
     class Pose:

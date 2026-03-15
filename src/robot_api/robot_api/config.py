@@ -4,7 +4,7 @@ EPSILON = 1e-6
 
 LINK_LENGTHS = {"L2": 0.2}
 
-JOINT_OFFSETS = {"D1": 0.182, "D2": 0.0135, "D4": 0.1885, "D6": 0.05813392}
+JOINT_OFFSETS = {"D1": 0.2, "D2": 0.0135, "D4": 0.2, "D6": 0.05682811}
 
 # TODO: Get limits from urdf
 JOINT_POSITION_LIMITS = [

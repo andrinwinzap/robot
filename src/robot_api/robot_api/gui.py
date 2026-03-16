@@ -97,8 +97,8 @@ MAPPINGS = {
             "L-Stick Horiz: Side-to-Side",
             "R-Stick Horiz: Tilt (Roll)",
             "R-Stick Vert:  Pitch",
-            "L2/R2:         Yaw (Rotate)",
-            "L1/R1:         Up / Down",
+            "L2/R2:         Up / Down",
+            "L1/R1:         Yaw (Rotate)",
             "D-Pad Up/Down: Gripper Open/Close",
         ],
     },
@@ -196,12 +196,12 @@ def apply_mapping(joystick, mapping_key, l_spd, a_spd):
         if dpad[0] != 0:
             ang_vel[0] = dpad[0] * a_spd
     elif mapping_key == "standard":
-        # L1/R1 controls Z (up/down) in standard mode.
-        lin_vel[2] = (float(read_button(joystick, 5)) - float(read_button(joystick, 4))) * l_spd
-        # L2/R2 controls yaw. Common mappings are L2 axis=2 and R2 axis=5.
+        # L2/R2 controls Z (up/down) — analog triggers give more precision.
         l2 = read_trigger(joystick, 2, 6)
         r2 = read_trigger(joystick, 5, 7)
-        ang_vel[2] = (l2 - r2) * a_spd
+        lin_vel[2] = (l2 - r2) * l_spd
+        # L1/R1 controls yaw (on/off).
+        ang_vel[2] = (float(read_button(joystick, 5)) - float(read_button(joystick, 4))) * a_spd
 
     return lin_vel, ang_vel
 

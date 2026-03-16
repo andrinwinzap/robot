@@ -18,6 +18,9 @@
 #include <iostream>
 #include <chrono>
 #include <algorithm>
+#include <limits>
+#include "std_msgs/msg/string.hpp"
+#include "urdf/model.h"
 
 namespace robot_hardware
 {
@@ -98,6 +101,56 @@ namespace robot_hardware
       integrated_position_initialized_.resize(num_joints, false);
       command_publishers_.resize(num_joints);
       state_subscribers_.resize(num_joints);
+      joint_pos_min_.resize(num_joints, -std::numeric_limits<double>::infinity());
+      joint_pos_max_.resize(num_joints,  std::numeric_limits<double>::infinity());
+
+      // Fetch URDF from /robot_description topic and parse joint position limits
+      {
+        bool got_description = false;
+        std::string robot_description_xml;
+        auto robot_desc_sub = node_->create_subscription<std_msgs::msg::String>(
+          "/robot_description",
+          rclcpp::QoS(1).transient_local(),
+          [&robot_description_xml, &got_description](const std_msgs::msg::String::SharedPtr msg)
+          {
+            robot_description_xml = msg->data;
+            got_description = true;
+          });
+        auto start = std::chrono::steady_clock::now();
+        while (!got_description && std::chrono::steady_clock::now() - start < std::chrono::seconds(5))
+        {
+          executor_->spin_some(std::chrono::milliseconds(50));
+        }
+        robot_desc_sub.reset();
+
+        if (got_description)
+        {
+          urdf::Model urdf_model;
+          if (urdf_model.initString(robot_description_xml))
+          {
+            for (size_t i = 0; i < num_joints; ++i)
+            {
+              auto joint = urdf_model.getJoint(info_.joints[i].name);
+              if (joint && joint->limits)
+              {
+                joint_pos_min_[i] = joint->limits->lower;
+                joint_pos_max_[i] = joint->limits->upper;
+                RCLCPP_INFO(node_->get_logger(),
+                            "Joint %s position limits: [%f, %f]",
+                            info_.joints[i].name.c_str(), joint_pos_min_[i], joint_pos_max_[i]);
+              }
+            }
+          }
+          else
+          {
+            RCLCPP_WARN(node_->get_logger(), "Failed to parse URDF from /robot_description");
+          }
+        }
+        else
+        {
+          RCLCPP_WARN(node_->get_logger(), "Timed out waiting for /robot_description — joint limits will not be enforced in fake hardware mode");
+        }
+      }
 
       RCLCPP_INFO(node_->get_logger(), "Initializing hardware interface with %zu joints", num_joints);
       
@@ -293,18 +346,26 @@ namespace robot_hardware
         }
 
         integrated_position_commands_[i] += velocity_cmd * period.seconds();
-        position_cmd = integrated_position_commands_[i];
 
-        // In fake hardware mode, read() mirrors the position command directly.
-        // Write the integrated value back so position progresses from velocity commands.
+        // Clamp integrated position to joint limits in fake hardware mode
         if (fake_hardware)
         {
-          set_command(pos_cmd_name, position_cmd);
+          integrated_position_commands_[i] = std::clamp(
+            integrated_position_commands_[i], joint_pos_min_[i], joint_pos_max_[i]);
         }
+
+        position_cmd = integrated_position_commands_[i];
       }
       else
       {
         integrated_position_initialized_[i] = false;
+      }
+
+      // Clamp position command to joint limits in fake hardware mode
+      if (fake_hardware)
+      {
+        position_cmd = std::clamp(position_cmd, joint_pos_min_[i], joint_pos_max_[i]);
+        set_command(pos_cmd_name, position_cmd);
       }
 
       if (!fake_hardware)

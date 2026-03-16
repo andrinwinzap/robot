@@ -78,6 +78,10 @@ namespace robot_hardware
     std::vector<double> integrated_position_commands_;
     std::vector<bool> integrated_position_initialized_;
 
+    // Joint position limits from URDF (used in fake hardware mode)
+    std::vector<double> joint_pos_min_;
+    std::vector<double> joint_pos_max_;
+
     // Mutex to protect concurrent access to joint_positions_ and joint_velocities_
     std::mutex joint_state_mutex_;
 

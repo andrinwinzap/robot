@@ -6,3 +6,6 @@
 	path = micro_ros_msgs
 	url = https://github.com/micro-ROS/micro_ros_msgs.git
 	branch = jazzy
+[submodule "lerobot_ros"]
+	path = lerobot_ros
+	url = https://github.com/sacovo/lerobot_ros.git

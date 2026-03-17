@@ -99,6 +99,9 @@ namespace robot_hardware
       joint_commands_.resize(num_joints, 0.0);
       integrated_position_commands_.resize(num_joints, 0.0);
       integrated_position_initialized_.resize(num_joints, false);
+      idle_mode_.store(true);  // Start in idle mode before any controller is activated
+      idle_position_commands_.resize(num_joints, 0.0);
+      idle_initialized_.resize(num_joints, false);
       command_publishers_.resize(num_joints);
       state_subscribers_.resize(num_joints);
       joint_pos_min_.resize(num_joints, -std::numeric_limits<double>::infinity());
@@ -217,6 +220,7 @@ namespace robot_hardware
       for (auto &integrated_cmd : integrated_position_commands_)
         integrated_cmd = 0.0;
       std::fill(integrated_position_initialized_.begin(), integrated_position_initialized_.end(), false);
+      std::fill(idle_initialized_.begin(), idle_initialized_.end(), false);
     }
 
     // Reset ros2_control interfaces
@@ -318,6 +322,48 @@ namespace robot_hardware
   return_type RobotSystem::write(const rclcpp::Time & /*time*/, const rclcpp::Duration &period)
   {
     const bool fake_hardware = fake_hardware_.load();
+    const bool idle_mode = idle_mode_.load();
+
+    if (idle_mode)
+    {
+      // Copy current positions once under the lock (real hardware only)
+      std::vector<double> current_positions(info_.joints.size());
+      if (!fake_hardware)
+      {
+        std::lock_guard<std::mutex> lock(joint_state_mutex_);
+        current_positions = joint_positions_;
+      }
+
+      for (size_t i = 0; i < info_.joints.size(); i++)
+      {
+        const std::string pos_name = info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION;
+        double current_pos = fake_hardware ? get_state(pos_name) : current_positions[i];
+
+        if (!idle_initialized_[i])
+        {
+          idle_position_commands_[i] = current_pos;
+          idle_initialized_[i] = true;
+        }
+        else if (std::abs(current_pos - idle_position_commands_[i]) > IDLE_THRESHOLD_RAD)
+        {
+          idle_position_commands_[i] = current_pos;
+        }
+
+        if (!fake_hardware)
+        {
+          std_msgs::msg::Float32MultiArray msg;
+          msg.data.resize(2);
+          msg.data[0] = static_cast<float>(idle_position_commands_[i]);
+          msg.data[1] = 0.0f;
+          command_publishers_[i]->publish(msg);
+          RCLCPP_DEBUG(node_->get_logger(),
+                       "Idle mode: joint %s commanding position %.3f (current=%.3f)",
+                       info_.joints[i].name.c_str(), idle_position_commands_[i], current_pos);
+        }
+      }
+      return return_type::OK;
+    }
+
     const bool velocity_control_mode = velocity_control_mode_.load();
 
     // Always process commands so fake hardware can evolve position from velocity commands.
@@ -404,19 +450,31 @@ namespace robot_hardware
     const bool has_velocity = has_interface_type(start_interfaces, hardware_interface::HW_IF_VELOCITY);
     const bool has_position = has_interface_type(start_interfaces, hardware_interface::HW_IF_POSITION);
 
-    // Auto-enable for velocity-only controllers (e.g. forward command controller),
-    // and auto-disable when position interfaces are started (e.g. trajectory controller).
-    if (has_velocity && !has_position)
+    if (!has_velocity && !has_position)
     {
-      velocity_control_mode_.store(true);
-      RCLCPP_INFO(node_->get_logger(),
-                  "Auto-enabled velocity_control_mode (velocity-only command interfaces started)");
+      // No controller is claiming any interfaces — enter idle mode
+      idle_mode_.store(true);
+      std::fill(idle_initialized_.begin(), idle_initialized_.end(), false);
+      RCLCPP_INFO(node_->get_logger(), "Entering idle mode (no active controllers)");
     }
-    else if (has_position)
+    else
     {
-      velocity_control_mode_.store(false);
-      RCLCPP_INFO(node_->get_logger(),
-                  "Auto-disabled velocity_control_mode (position command interfaces started)");
+      idle_mode_.store(false);
+
+      // Auto-enable for velocity-only controllers (e.g. forward command controller),
+      // and auto-disable when position interfaces are started (e.g. trajectory controller).
+      if (has_velocity && !has_position)
+      {
+        velocity_control_mode_.store(true);
+        RCLCPP_INFO(node_->get_logger(),
+                    "Auto-enabled velocity_control_mode (velocity-only command interfaces started)");
+      }
+      else if (has_position)
+      {
+        velocity_control_mode_.store(false);
+        RCLCPP_INFO(node_->get_logger(),
+                    "Auto-disabled velocity_control_mode (position command interfaces started)");
+      }
     }
 
     return return_type::OK;

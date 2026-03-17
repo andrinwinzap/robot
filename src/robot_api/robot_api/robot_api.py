@@ -103,8 +103,22 @@ class Robot:
         else:
             self.node.get_logger().set_level(LoggingSeverity.INFO)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.shutdown()
+
     def shutdown(self):
+        if not rclpy.ok():
+            return
         self.cartesian_space._stop_twist_timer()
+        # Deactivate all controllers so the hardware returns to idle mode
+        active = [c for c in ["joint_trajectory_controller", "joint_velocity_controller"]
+                  if self._controller_type == c]
+        if active:
+            self._switch_controllers(start=[], stop=active)
+            self._controller_type = None
         self._executor.shutdown()
         self._executor_thread.join()
         self.node.destroy_node()

@@ -89,6 +89,14 @@ namespace robot_hardware
     std::atomic<bool> fake_hardware_;
     std::atomic<bool> velocity_control_mode_;
 
+    // Idle mode: active when no controller claims interfaces. Continuously mirrors current
+    // joint positions as targets (with a threshold) so the arm does not jump after an e-stop.
+    std::atomic<bool> idle_mode_;
+    std::vector<double> idle_position_commands_;
+    std::vector<bool> idle_initialized_;
+    // Minimum position change (radians) before idle mode updates its target, to ignore noise
+    static constexpr double IDLE_THRESHOLD_RAD = 0.01;
+
     // Thread for spinning the ROS node
     std::thread spin_thread_;
     std::atomic<bool> should_stop_;

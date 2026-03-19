@@ -30,6 +30,20 @@ class JointSpace:
         trajectory = self.robot._generate_trajectory(path)
 
         return self.robot._send_trajectory(trajectory)
+    
+    def follow_path(self, path: "JointSpace.Path"):
+        
+        offset = np.linalg.norm(
+            np.array(path.points[0]) - self.robot._joint_configuration
+        )
+
+        if offset > 1e-1:
+            self.robot.node.get_logger().error("Robot not at start of path")
+            return False
+
+        trajectory = self.robot._generate_trajectory(path)
+
+        return self.robot._send_trajectory(trajectory)
 
     def set_velocities(self, velocities: Sequence[float]):
         self.robot._use_velocity_controller()

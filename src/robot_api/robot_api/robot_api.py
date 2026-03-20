@@ -1,3 +1,4 @@
+import atexit
 import time
 from threading import Thread
 from typing import Sequence
@@ -83,6 +84,7 @@ class Robot:
         while self._joint_configuration is None:
             time.sleep(0.001)
         self.node.get_logger().debug("First joint state received, robot ready.")
+        atexit.register(self.shutdown)
 
     def set_fake_hardware_mode(self, value):
         param = Parameter()
@@ -102,12 +104,6 @@ class Robot:
             self.node.get_logger().set_level(LoggingSeverity.DEBUG)
         else:
             self.node.get_logger().set_level(LoggingSeverity.INFO)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        self.shutdown()
 
     def shutdown(self):
         if not rclpy.ok():

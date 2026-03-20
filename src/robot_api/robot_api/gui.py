@@ -96,7 +96,7 @@ MAPPINGS = {
             "R-Stick Vert:  Pitch",
             "L2 / R2:       Up / Down",
             "L1 / R1:       Yaw",
-            "D-Pad Up/Down: Gripper",
+            "Circle / X:    Gripper Open/Close",
         ],
     },
 }
@@ -111,7 +111,7 @@ KEYBOARD_LEGEND = [
     "W / S:         Fwd / Back",
     "A / D:         Side",
     "Space / LShift: Up / Down",
-    "Left / Right:  Roll",
+    "Left / Right:  Roll (inverted)",
     "Up / Down:     Pitch",
     "Q / E:         Yaw",
     "O / P:         Gripper",
@@ -555,9 +555,8 @@ def main():
                     if read_button(joystick, 4): gripper_pos += GRIPPER_SPEED * dt_sec
                     if read_button(joystick, 5): gripper_pos -= GRIPPER_SPEED * dt_sec
                 elif selected_mapping == "standard":
-                    dpad = joystick.get_hat(0)
-                    if dpad[1] > 0: gripper_pos += GRIPPER_SPEED * dt_sec
-                    if dpad[1] < 0: gripper_pos -= GRIPPER_SPEED * dt_sec
+                    if read_button(joystick, 1): gripper_pos += GRIPPER_SPEED * dt_sec  # Circle
+                    if read_button(joystick, 0): gripper_pos -= GRIPPER_SPEED * dt_sec  # X
         elif selected_input_method == "keyboard":
             if keys[pygame.K_w]:      target_lin_vel[0] += l_spd
             if keys[pygame.K_s]:      target_lin_vel[0] -= l_spd
@@ -565,8 +564,8 @@ def main():
             if keys[pygame.K_d]:      target_lin_vel[1] -= l_spd
             if keys[pygame.K_SPACE]:  target_lin_vel[2] += l_spd
             if keys[pygame.K_LSHIFT]: target_lin_vel[2] -= l_spd
-            if keys[pygame.K_LEFT]:   target_ang_vel[0] += a_spd
-            if keys[pygame.K_RIGHT]:  target_ang_vel[0] -= a_spd
+            if keys[pygame.K_LEFT]:   target_ang_vel[0] -= a_spd
+            if keys[pygame.K_RIGHT]:  target_ang_vel[0] += a_spd
             if keys[pygame.K_UP]:     target_ang_vel[1] += a_spd
             if keys[pygame.K_DOWN]:   target_ang_vel[1] -= a_spd
             if keys[pygame.K_q]:      target_ang_vel[2] += a_spd

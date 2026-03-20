@@ -455,6 +455,7 @@ namespace robot_hardware
       // No controller is claiming any interfaces — enter idle mode
       idle_mode_.store(true);
       std::fill(idle_initialized_.begin(), idle_initialized_.end(), false);
+      std::fill(integrated_position_initialized_.begin(), integrated_position_initialized_.end(), false);
       RCLCPP_INFO(node_->get_logger(), "Entering idle mode (no active controllers)");
     }
     else

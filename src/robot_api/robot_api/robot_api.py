@@ -1,4 +1,5 @@
 import atexit
+import signal
 import time
 from threading import Thread
 from typing import Sequence
@@ -44,6 +45,7 @@ class Robot:
         self._fake_hardware = False
 
         rclpy.init()
+        signal.signal(signal.SIGINT, lambda *_: exit(0))
 
         self.node = Node(
             "robot_api_client", automatically_declare_parameters_from_overrides=True

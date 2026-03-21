@@ -329,6 +329,7 @@ def main():
     max_lin_accel  = LIN_ACCEL_DEFAULT
     max_ang_accel  = ANG_ACCEL_DEFAULT
     fake_mode      = args.fake_hardware
+    orientation_lock = False
     gripper_pos    = 0.0
     last_sent_gripper_pos = None
     current_lin_vel = np.zeros(3)
@@ -388,8 +389,9 @@ def main():
 
         # Control section
         ctrl_y      = lp.y + sc(16)
-        hw_rect     = pygame.Rect(cx, ctrl_y + sc(20), cw, row_h)
-        input_rect  = pygame.Rect(cx, hw_rect.bottom + row_gap, cw, row_h)
+        hw_rect          = pygame.Rect(cx, ctrl_y + sc(20), cw, row_h)
+        orient_lock_rect = pygame.Rect(cx, hw_rect.bottom + row_gap, cw, row_h)
+        input_rect       = pygame.Rect(cx, orient_lock_rect.bottom + row_gap, cw, row_h)
         if selected_input_method == "controller":
             mapping_rect = pygame.Rect(cx, input_rect.bottom + row_gap, cw, row_h)
             legend_y = mapping_rect.bottom + sc(12)
@@ -498,6 +500,9 @@ def main():
                         fake_mode = not fake_mode
                         robot.set_fake_hardware_mode(fake_mode)
                         hc = True
+                    elif orient_lock_rect.collidepoint(ep):
+                        orientation_lock = not orientation_lock
+                        hc = True
                     elif input_rect.collidepoint(ep):
                         input_dropdown_open = not input_dropdown_open
                         mapping_dropdown_open = False
@@ -590,6 +595,8 @@ def main():
         if keys[pygame.K_p]: gripper_pos -= GRIPPER_SPEED * dt_sec
         gripper_pos = float(np.clip(gripper_pos, GRIPPER_MIN, GRIPPER_MAX))
 
+        if orientation_lock:
+            target_ang_vel = np.zeros(3)
         current_lin_vel = limit_acceleration(current_lin_vel, target_lin_vel, max_lin_accel, dt_sec)
         current_ang_vel = limit_acceleration(current_ang_vel, target_ang_vel, max_ang_accel, dt_sec)
         robot.cartesian_space.twist(tuple(current_lin_vel), tuple(current_ang_vel))
@@ -626,6 +633,18 @@ def main():
         hw_text = "● REAL HARDWARE" if not fake_mode else "● FAKE HARDWARE"
         hw_img = ui_font.render(hw_text, True, hw_color_text)
         screen.blit(hw_img, (hw_rect.centerx - hw_img.get_width() // 2, hw_rect.centery - hw_img.get_height() // 2))
+
+        # Orientation lock toggle
+        ol_hov = orient_lock_rect.collidepoint(mouse_pos)
+        ol_bg     = (22, 50, 80) if orientation_lock else (40, 25, 65)
+        ol_border = (55, 155, 255) if orientation_lock else (120, 60, 180)
+        ol_text_c = (80, 190, 255) if orientation_lock else (160, 100, 230)
+        pygame.draw.rect(screen, HOVER_COLOR if ol_hov else ol_bg, orient_lock_rect, border_radius=br)
+        pygame.draw.rect(screen, ol_border, orient_lock_rect, 1, border_radius=br)
+        ol_text = "🔒 ORIENTATION LOCKED" if orientation_lock else "🔓 ORIENTATION FREE"
+        ol_img = ui_font.render(ol_text, True, ol_text_c)
+        screen.blit(ol_img, (orient_lock_rect.centerx - ol_img.get_width() // 2,
+                              orient_lock_rect.centery - ol_img.get_height() // 2))
 
         # Input method dropdown
         draw_dropdown(screen, ui_font, input_rect,

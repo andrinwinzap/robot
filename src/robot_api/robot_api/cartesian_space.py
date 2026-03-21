@@ -222,9 +222,16 @@ class CartesianSpace:
         self.robot._send_joint_velocities(np.zeros(6))
 
     def _twist_callback(self):
-        joint_velocities = (
-            jacobian_dls_pinv(self.robot._joint_configuration) @ self._target_twist
-        )
+        q = self.robot._joint_configuration
+        omega = self._target_twist[3:]
+        v_tcp = self._target_twist[:3]
+
+        R_flange = forward_kinematics(q)[:3, :3]
+        p_tcp_base = R_flange @ np.array(self.robot._tcp_position, float)
+        v_flange = v_tcp - np.cross(omega, p_tcp_base)
+
+        flange_twist = np.hstack([v_flange, omega])
+        joint_velocities = jacobian_dls_pinv(q) @ flange_twist
 
         limits = np.array(self.robot.joint_velocity_limits)
 

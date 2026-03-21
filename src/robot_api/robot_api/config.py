@@ -21,8 +21,8 @@ JOINT_VELOCITY_LIMITS = [
     np.pi * 5,
     np.pi * 5,
     np.pi * 5,
-    np.pi * 5,
-    np.pi * 5,
+    1.7,
+    1.7,
 ]
 
 JOINT_ACCELERATION_LIMITS = [

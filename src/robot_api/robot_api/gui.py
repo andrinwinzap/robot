@@ -1,10 +1,13 @@
 import argparse
 import os
+import threading
 
 import numpy as np
 import pygame
 
 from robot_api import Robot
+from robot_api.cartesian_space import CartesianSpace
+from robot_api.joint_space import JointSpace
 
 # Allow controller input while window is not focused.
 os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
@@ -48,11 +51,13 @@ BTN_COLOR     = (27, 29, 42)
 BTN_ACTIVE    = (0, 125, 215)
 
 # Robot parameters
-GRIPPER_MIN, GRIPPER_MAX, GRIPPER_SPEED = 0.0, 0.05, 0.1
+GRIPPER_MIN, GRIPPER_MAX = 0.0, 0.045
+GRIPPER_SPD_MIN, GRIPPER_SPD_MAX, GRIPPER_SPD_STEP, GRIPPER_SPD_DEFAULT = 0.005, 0.5, 0.005, 0.05
 LIN_SPD_MIN,   LIN_SPD_MAX,   LIN_SPD_STEP,   LIN_SPD_DEFAULT   = 0.01, 1.0,  0.01, 0.02
 ANG_SPD_MIN,   ANG_SPD_MAX,   ANG_SPD_STEP,   ANG_SPD_DEFAULT   = 0.1,  2.0,  0.05, 0.2
 LIN_ACCEL_MIN, LIN_ACCEL_MAX, LIN_ACCEL_STEP, LIN_ACCEL_DEFAULT = 0.01, 1.0,  0.01, 0.02
 ANG_ACCEL_MIN, ANG_ACCEL_MAX, ANG_ACCEL_STEP, ANG_ACCEL_DEFAULT = 0.05, 1.0,  0.05, 0.2
+JNT_VEL_MIN,   JNT_VEL_MAX,  JNT_VEL_STEP,  JNT_VEL_DEFAULT   = 0.1,  3.0,  0.1,  1.0
 
 MAPPINGS = {
     "drone": {
@@ -104,7 +109,6 @@ MAPPINGS = {
 INPUT_METHODS = {
     "controller": "Controller",
     "keyboard":   "Keyboard",
-    "buttons":    "Buttons",
 }
 
 KEYBOARD_LEGEND = [
@@ -116,27 +120,6 @@ KEYBOARD_LEGEND = [
     "Q / E:         Yaw",
     "O / P:         Gripper",
 ]
-
-BTN_DEFS = [
-    # Linear  (x, y, w, h, label, axis_color)
-    (838, 530, 62, 56, "X+",  (220,  70,  70)),
-    (838, 650, 62, 56, "X−",  (220,  70,  70)),
-    (768, 590, 62, 56, "Y+",  ( 70, 200,  90)),
-    (908, 590, 62, 56, "Y−",  ( 70, 200,  90)),
-    (1008,530, 68, 56, "Z+",  ( 55, 155, 255)),
-    (1008,650, 68, 56, "Z−",  ( 55, 155, 255)),
-    # Rotation
-    (1228,530, 62, 56, "P+",  (210, 120, 255)),
-    (1228,650, 62, 56, "P−",  (210, 120, 255)),
-    (1158,590, 62, 56, "Yw+", (255, 190,  50)),
-    (1298,590, 62, 56, "Yw−", (255, 190,  50)),
-    (1398,530, 68, 56, "R+",  (  0, 210, 200)),
-    (1398,650, 68, 56, "R−",  (  0, 210, 200)),
-]
-
-# Bounding boxes of the two button groups (base resolution)
-BTN_GROUP_LINEAR   = (754, 516, 336, 204)
-BTN_GROUP_ROTATION = (1144, 516, 336, 204)
 
 
 def apply_deadzone(value, deadzone=0.1):
@@ -192,52 +175,53 @@ def apply_mapping(joystick, mapping_key, l_spd, a_spd):
     return lin_vel, ang_vel
 
 
-class AxisButton:
-    def __init__(self, x, y, w, h, label, color=(55, 155, 255)):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.label = label
-        self.color = color
-        self.is_pressed = False
-        self.mouse_down = False
+class TextInput:
+    def __init__(self, text="0.0000"):
+        self.text = text
+        self.rect = pygame.Rect(0, 0, 0, 0)
+        self.focused = False
+        self.cursor = len(text)
 
-    def draw(self, surf, font, br=6):
-        r = self.rect
-        pressed = self.is_pressed
+    def handle_key(self, event):
+        if event.key == pygame.K_BACKSPACE:
+            if self.cursor > 0:
+                self.text = self.text[:self.cursor - 1] + self.text[self.cursor:]
+                self.cursor -= 1
+        elif event.key == pygame.K_DELETE:
+            if self.cursor < len(self.text):
+                self.text = self.text[:self.cursor] + self.text[self.cursor + 1:]
+        elif event.key == pygame.K_LEFT:
+            self.cursor = max(0, self.cursor - 1)
+        elif event.key == pygame.K_RIGHT:
+            self.cursor = min(len(self.text), self.cursor + 1)
+        elif event.key == pygame.K_HOME:
+            self.cursor = 0
+        elif event.key == pygame.K_END:
+            self.cursor = len(self.text)
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+            self.focused = False
+        elif event.unicode in "0123456789.-":
+            self.text = self.text[:self.cursor] + event.unicode + self.text[self.cursor:]
+            self.cursor += 1
 
-        # Background
-        bg = self.color if pressed else (28, 30, 46)
-        pygame.draw.rect(surf, bg, r, border_radius=br)
+    def get_float(self, default=0.0):
+        try:
+            return float(self.text)
+        except ValueError:
+            return default
 
-        # Colored border — dim when idle, bright when pressed
-        border_alpha = self.color
-        border_w = 2 if pressed else 1
-        pygame.draw.rect(surf, border_alpha, r, border_w, border_radius=br)
-
-        # Top highlight strip (gives depth when not pressed)
-        if not pressed:
-            hl = pygame.Rect(r.x + br, r.y + 2, r.w - br * 2, 2)
-            pygame.draw.rect(surf, tuple(min(255, c + 40) for c in self.color), hl)
-
-        # Label
-        axis = self.label[:-1]   # e.g. "X", "Yw", "R"
-        sign = self.label[-1]    # "+" or "−"
-        text_color = (15, 15, 20) if pressed else TEXT_COLOR
-        sign_color = (15, 15, 20) if pressed else self.color
-
-        axis_img = font.render(axis, True, text_color)
-        sign_img = font.render(sign, True, sign_color)
-
-        total_w = axis_img.get_width() + sign_img.get_width() + 3
-        tx = r.centerx - total_w // 2
-        ty = r.centery - axis_img.get_height() // 2
-        surf.blit(axis_img, (tx, ty))
-        surf.blit(sign_img, (tx + axis_img.get_width() + 3, ty))
-
-    def handle_event(self, event, pos=None):
-        if event.type == pygame.MOUSEBUTTONDOWN and pos is not None and self.rect.collidepoint(pos):
-            self.mouse_down = True
-        elif event.type == pygame.MOUSEBUTTONUP:
-            self.mouse_down = False
+    def draw(self, surf, font, br=4):
+        bg = (30, 35, 55) if self.focused else (20, 22, 34)
+        border = ACCENT_COLOR if self.focused else BORDER_COLOR
+        pygame.draw.rect(surf, bg, self.rect, border_radius=br)
+        pygame.draw.rect(surf, border, self.rect, 1, border_radius=br)
+        img = font.render(self.text, True, TEXT_COLOR)
+        surf.blit(img, (self.rect.x + 6, self.rect.centery - img.get_height() // 2))
+        if self.focused:
+            pre_w = font.size(self.text[:self.cursor])[0]
+            cur_x = self.rect.x + 6 + pre_w
+            pygame.draw.line(surf, ACCENT_COLOR,
+                             (cur_x, self.rect.y + 4), (cur_x, self.rect.bottom - 4))
 
 
 # --- DRAW HELPERS ---
@@ -316,6 +300,9 @@ def main():
 
     screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Robot Command Center")
+    _icon_path = os.path.join(os.path.dirname(__file__), "robot.png")
+    if os.path.exists(_icon_path):
+        pygame.display.set_icon(pygame.image.load(_icon_path))
 
     last_s = 0.0
     font       = pygame.font.SysFont("Consolas", 16)
@@ -328,6 +315,8 @@ def main():
     a_spd          = ANG_SPD_DEFAULT
     max_lin_accel  = LIN_ACCEL_DEFAULT
     max_ang_accel  = ANG_ACCEL_DEFAULT
+    joint_vel      = JNT_VEL_DEFAULT
+    gripper_speed  = GRIPPER_SPD_DEFAULT
     fake_mode      = args.fake_hardware
     orientation_lock = False
     gripper_pos    = 0.0
@@ -352,12 +341,36 @@ def main():
     tool_dropdown_open    = False
     selected_tool_idx     = tool_names.index("gripper") if "gripper" in tool_names else 0
     tool_status           = "Ready"
-    btns = [AxisButton(0, 0, 0, 0, label, color) for _, _, _, _, label, color in BTN_DEFS]
+    grip_input            = TextInput(f"{GRIPPER_MIN:.4f}")
 
     try:
         robot.tool_changer.attach_tool(robot.tools.gripper)
     except Exception as e:
         robot.node.get_logger().warn(f"Failed to attach gripper: {e}")
+
+    motion_mode       = "cartesian"
+    enforce_linearity = True
+    move_inputs   = [TextInput() for _ in range(6)]
+    focused_input = None
+    move_thread   = None
+    move_status   = ""
+
+    def do_move():
+        nonlocal move_status
+        move_status = "Moving..."
+        try:
+            vals = [inp.get_float() for inp in move_inputs]
+            if motion_mode == "cartesian":
+                robot.cartesian_space.max_linear_velocity    = l_spd
+                robot.cartesian_space.max_angular_velocity   = a_spd
+                robot.cartesian_space.max_linear_acceleration = max_lin_accel
+                ok = robot.cartesian_space.move(CartesianSpace.Pose(vals[:3], vals[3:]), enforce_linearity=enforce_linearity)
+            else:
+                robot.joint_space.max_joint_velocity = joint_vel
+                ok = robot.joint_space.move(JointSpace.Point(vals))
+            move_status = "Done" if ok else "Failed"
+        except Exception as e:
+            move_status = f"Error: {e}"
 
     while True:
         screen.fill(BG_COLOR)
@@ -401,9 +414,8 @@ def main():
 
         legend_lines = (
             MAPPINGS[selected_mapping]["legend"] if selected_input_method == "controller"
-            else KEYBOARD_LEGEND if selected_input_method == "keyboard"
-            else ["On-screen buttons  →  right panel", "O / P:  Gripper"]
-        ) + [f"Gripper pos:  {gripper_pos:.3f} m"]
+            else KEYBOARD_LEGEND
+        )
         legend_h = sc(23)
 
         if selected_input_method == "controller" and joystick is None:
@@ -425,8 +437,10 @@ def main():
             ("Ang Vel",  f"{a_spd:.3f} rad/s"),
             ("Lin Acc",  f"{max_lin_accel:.3f} m/s²"),
             ("Ang Acc",  f"{max_ang_accel:.3f} rad/s²"),
+            ("Jnt Vel",  f"{joint_vel:.2f} rad/s"),
+            ("Grp Spd",  f"{gripper_speed:.3f} m/s"),
         ]
-        kin_rows_y    = [kin_y + sc(22) + i * (kin_row_h + kin_row_gap) for i in range(4)]
+        kin_rows_y    = [kin_y + sc(22) + i * (kin_row_h + kin_row_gap) for i in range(6)]
         kin_dec_rects = [pygame.Rect(cx,                  y, kin_btn_w, kin_row_h) for y in kin_rows_y]
         kin_inc_rects = [pygame.Rect(cx + cw - kin_btn_w, y, kin_btn_w, kin_row_h) for y in kin_rows_y]
         kin_end_y = kin_rows_y[-1] + kin_row_h
@@ -442,15 +456,59 @@ def main():
         tool_attach_rect = pygame.Rect(cx + tool_dd_w + sc(7),          tool_row1_y, tool_btn_w, tool_row_h)
         tool_detach_rect = pygame.Rect(cx, tool_dd_rect.bottom + sc(7), cw,          tool_row_h)
         tool_status_y    = tool_detach_rect.bottom + sc(10)
+        grip_inp_y       = tool_status_y + sc(28)
+        grip_inp_lbl_w   = font.size("Gripper")[0] + sc(10)
+        grip_inp_w       = int(cw * 0.44)
+        grip_set_w       = cw - grip_inp_lbl_w - grip_inp_w - sc(7)
+        grip_inp_h       = sc(32)
+        grip_input.rect  = pygame.Rect(cx + grip_inp_lbl_w, grip_inp_y, grip_inp_w, grip_inp_h)
+        grip_set_rect    = pygame.Rect(cx + grip_inp_lbl_w + grip_inp_w + sc(7), grip_inp_y, grip_set_w, grip_inp_h)
 
         # Telemetry card (top of right panel)
-        tel_card = pygame.Rect(rp.x + sc(14), rp.y + sc(14), rp.w - sc(28), sc(400))
+        tel_card = pygame.Rect(rp.x + sc(14), rp.y + sc(14), rp.w - sc(28), sc(480))
         btn_card = pygame.Rect(rp.x + sc(14), tel_card.bottom + sc(14), rp.w - sc(28),
                                rp.bottom - tel_card.bottom - sc(28))
 
-        # Update axis button rects
-        for b, (bx, by, bw, bh, _, _col) in zip(btns, BTN_DEFS):
-            b.rect = pygame.Rect(sc(bx), sc(by), sc(bw), sc(bh))
+        # Motion target section (inside btn_card) — vertically centred
+        mcx = btn_card.x + sc(14)
+        mcw = btn_card.w - sc(28)
+        inp_h     = sc(30)
+        inp_gap   = sc(5)
+        inp_lbl_w = sc(46)
+        col_w     = (mcw - sc(10)) // 2
+        fld_w     = col_w - inp_lbl_w - sc(4)
+
+        inputs_h = 3 * inp_h + 2 * inp_gap
+        y_start  = btn_card.y + sc(14)
+
+        motion_mode_y     = y_start + sc(22) + sc(10)
+        motion_mode_btn_w = (mcw - sc(7)) // 2
+        cart_mode_rect    = pygame.Rect(mcx, motion_mode_y, motion_mode_btn_w, row_h)
+        joint_mode_rect   = pygame.Rect(
+            mcx + motion_mode_btn_w + sc(7), motion_mode_y,
+            mcw - motion_mode_btn_w - sc(7), row_h,
+        )
+        inp_y0 = cart_mode_rect.bottom + sc(8)
+        for i, inp in enumerate(move_inputs):
+            col = i // 3
+            row = i % 3
+            inp.rect = pygame.Rect(
+                mcx + col * (col_w + sc(10)) + inp_lbl_w + sc(4),
+                inp_y0 + row * (inp_h + inp_gap),
+                fld_w, inp_h,
+            )
+        if motion_mode == "cartesian":
+            lin_toggle_y    = inp_y0 + inputs_h + sc(8)
+            lin_toggle_rect = pygame.Rect(mcx, lin_toggle_y, mcw, row_h)
+            move_btn_y      = lin_toggle_y + row_h + sc(7)
+        else:
+            lin_toggle_rect = None
+            move_btn_y      = inp_y0 + inputs_h + sc(8)
+        move_btn_w_px = int(mcw * 0.62)
+        use_cur_w     = mcw - move_btn_w_px - sc(7)
+        move_btn_rect = pygame.Rect(mcx, move_btn_y, move_btn_w_px, row_h)
+        use_cur_rect  = pygame.Rect(mcx + move_btn_w_px + sc(7), move_btn_y, use_cur_w, row_h)
+        motion_status_y = move_btn_y + row_h + sc(8)
 
         mouse_pos = pygame.mouse.get_pos()
 
@@ -459,10 +517,6 @@ def main():
             if event.type == pygame.QUIT:
                 return
             ep = event.pos if hasattr(event, "pos") else None
-            if selected_input_method == "buttons":
-                for b in btns:
-                    b.handle_event(event, ep)
-
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 hc = False
 
@@ -529,6 +583,14 @@ def main():
                         max_ang_accel = clamp(max_ang_accel - ANG_ACCEL_STEP, ANG_ACCEL_MIN, ANG_ACCEL_MAX); hc = True
                     elif kin_inc_rects[3].collidepoint(ep):
                         max_ang_accel = clamp(max_ang_accel + ANG_ACCEL_STEP, ANG_ACCEL_MIN, ANG_ACCEL_MAX); hc = True
+                    elif kin_dec_rects[4].collidepoint(ep):
+                        joint_vel = clamp(joint_vel - JNT_VEL_STEP, JNT_VEL_MIN, JNT_VEL_MAX); hc = True
+                    elif kin_inc_rects[4].collidepoint(ep):
+                        joint_vel = clamp(joint_vel + JNT_VEL_STEP, JNT_VEL_MIN, JNT_VEL_MAX); hc = True
+                    elif kin_dec_rects[5].collidepoint(ep):
+                        gripper_speed = clamp(gripper_speed - GRIPPER_SPD_STEP, GRIPPER_SPD_MIN, GRIPPER_SPD_MAX); hc = True
+                    elif kin_inc_rects[5].collidepoint(ep):
+                        gripper_speed = clamp(gripper_speed + GRIPPER_SPD_STEP, GRIPPER_SPD_MIN, GRIPPER_SPD_MAX); hc = True
                     elif tool_dd_rect.collidepoint(ep) and tool_names:
                         tool_dropdown_open = not tool_dropdown_open
                         input_dropdown_open = False
@@ -550,6 +612,70 @@ def main():
                         except Exception as e:
                             tool_status = f"Error: {e}"
                         hc = True
+                    elif cart_mode_rect.collidepoint(ep):
+                        if motion_mode != "cartesian":
+                            motion_mode = "cartesian"
+                            p = robot.cartesian_space.read()
+                            vals = list(p.position) + list(p.orientation)
+                            for inp, v in zip(move_inputs, vals):
+                                inp.text = f"{v:.4f}"
+                        hc = True
+                    elif joint_mode_rect.collidepoint(ep):
+                        if motion_mode != "joint":
+                            motion_mode = "joint"
+                            p = robot.joint_space.read()
+                            vals = list(p.joint_configuration)
+                            for inp, v in zip(move_inputs, vals):
+                                inp.text = f"{v:.4f}"
+                        hc = True
+                    elif lin_toggle_rect is not None and lin_toggle_rect.collidepoint(ep) and motion_mode == "cartesian":
+                        enforce_linearity = not enforce_linearity
+                        hc = True
+                    elif move_btn_rect.collidepoint(ep):
+                        if move_thread is None or not move_thread.is_alive():
+                            move_thread = threading.Thread(target=do_move, daemon=True)
+                            move_thread.start()
+                        hc = True
+                    elif use_cur_rect.collidepoint(ep):
+                        if motion_mode == "cartesian":
+                            p = robot.cartesian_space.read()
+                            vals = list(p.position) + list(p.orientation)
+                        else:
+                            p = robot.joint_space.read()
+                            vals = list(p.joint_configuration)
+                        for inp, v in zip(move_inputs, vals):
+                            inp.text = f"{v:.4f}"
+                        hc = True
+
+            # Text input focus management
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and ep is not None:
+                clicked_on_input = False
+                for inp in list(move_inputs) + [grip_input]:
+                    if inp.rect.collidepoint(ep):
+                        clicked_on_input = True
+                        if focused_input is not inp:
+                            if focused_input:
+                                focused_input.focused = False
+                            focused_input = inp
+                            inp.focused = True
+                        break
+                if not clicked_on_input and focused_input is not None:
+                    focused_input.focused = False
+                    focused_input = None
+                if ep is not None and grip_set_rect.collidepoint(ep) and find_current_tool_name(tool_map, robot.tool_changer.current_tool) == "gripper":
+                    val = float(np.clip(grip_input.get_float(gripper_pos), GRIPPER_MIN, GRIPPER_MAX))
+                    grip_input.text = f"{val:.4f}"
+                    grip_input.cursor = len(grip_input.text)
+                    try:
+                        robot.tools.gripper.set_distance(val)
+                        gripper_pos = val
+                    except RuntimeError:
+                        pass
+
+            if event.type == pygame.KEYDOWN and focused_input is not None:
+                focused_input.handle_key(event)
+                if not focused_input.focused:
+                    focused_input = None
 
         # --- INPUT ---
         keys = pygame.key.get_pressed()
@@ -557,42 +683,27 @@ def main():
             if joystick:
                 target_lin_vel, target_ang_vel = apply_mapping(joystick, selected_mapping, l_spd, a_spd)
                 if selected_mapping == "drone":
-                    if read_button(joystick, 4): gripper_pos += GRIPPER_SPEED * dt_sec
-                    if read_button(joystick, 5): gripper_pos -= GRIPPER_SPEED * dt_sec
+                    if read_button(joystick, 4): gripper_pos += gripper_speed * dt_sec
+                    if read_button(joystick, 5): gripper_pos -= gripper_speed * dt_sec
                 elif selected_mapping == "standard":
-                    if read_button(joystick, 1): gripper_pos += GRIPPER_SPEED * dt_sec  # Circle
-                    if read_button(joystick, 0): gripper_pos -= GRIPPER_SPEED * dt_sec  # X
+                    if read_button(joystick, 1): gripper_pos += gripper_speed * dt_sec  # Circle
+                    if read_button(joystick, 0): gripper_pos -= gripper_speed * dt_sec  # X
         elif selected_input_method == "keyboard":
-            if keys[pygame.K_w]:      target_lin_vel[0] += l_spd
-            if keys[pygame.K_s]:      target_lin_vel[0] -= l_spd
-            if keys[pygame.K_a]:      target_lin_vel[1] += l_spd
-            if keys[pygame.K_d]:      target_lin_vel[1] -= l_spd
-            if keys[pygame.K_SPACE]:  target_lin_vel[2] += l_spd
-            if keys[pygame.K_LSHIFT]: target_lin_vel[2] -= l_spd
-            if keys[pygame.K_LEFT]:   target_ang_vel[0] -= a_spd
-            if keys[pygame.K_RIGHT]:  target_ang_vel[0] += a_spd
-            if keys[pygame.K_UP]:     target_ang_vel[1] += a_spd
-            if keys[pygame.K_DOWN]:   target_ang_vel[1] -= a_spd
-            if keys[pygame.K_q]:      target_ang_vel[2] += a_spd
-            if keys[pygame.K_e]:      target_ang_vel[2] -= a_spd
-        elif selected_input_method == "buttons":
-            for b in btns:
-                b.is_pressed = b.mouse_down
-            if btns[0].is_pressed:  target_lin_vel[0] += l_spd
-            if btns[1].is_pressed:  target_lin_vel[0] -= l_spd
-            if btns[2].is_pressed:  target_lin_vel[1] += l_spd
-            if btns[3].is_pressed:  target_lin_vel[1] -= l_spd
-            if btns[4].is_pressed:  target_lin_vel[2] += l_spd
-            if btns[5].is_pressed:  target_lin_vel[2] -= l_spd
-            if btns[6].is_pressed:  target_ang_vel[1] += a_spd
-            if btns[7].is_pressed:  target_ang_vel[1] -= a_spd
-            if btns[8].is_pressed:  target_ang_vel[2] += a_spd
-            if btns[9].is_pressed:  target_ang_vel[2] -= a_spd
-            if btns[10].is_pressed: target_ang_vel[0] += a_spd
-            if btns[11].is_pressed: target_ang_vel[0] -= a_spd
-
-        if keys[pygame.K_o]: gripper_pos += GRIPPER_SPEED * dt_sec
-        if keys[pygame.K_p]: gripper_pos -= GRIPPER_SPEED * dt_sec
+            if focused_input is None:
+                if keys[pygame.K_w]:      target_lin_vel[0] += l_spd
+                if keys[pygame.K_s]:      target_lin_vel[0] -= l_spd
+                if keys[pygame.K_a]:      target_lin_vel[1] += l_spd
+                if keys[pygame.K_d]:      target_lin_vel[1] -= l_spd
+                if keys[pygame.K_SPACE]:  target_lin_vel[2] += l_spd
+                if keys[pygame.K_LSHIFT]: target_lin_vel[2] -= l_spd
+                if keys[pygame.K_LEFT]:   target_ang_vel[0] -= a_spd
+                if keys[pygame.K_RIGHT]:  target_ang_vel[0] += a_spd
+                if keys[pygame.K_UP]:     target_ang_vel[1] += a_spd
+                if keys[pygame.K_DOWN]:   target_ang_vel[1] -= a_spd
+                if keys[pygame.K_q]:      target_ang_vel[2] += a_spd
+                if keys[pygame.K_e]:      target_ang_vel[2] -= a_spd
+        if keys[pygame.K_o]: gripper_pos += gripper_speed * dt_sec
+        if keys[pygame.K_p]: gripper_pos -= gripper_speed * dt_sec
         gripper_pos = float(np.clip(gripper_pos, GRIPPER_MIN, GRIPPER_MAX))
 
         if orientation_lock:
@@ -641,7 +752,7 @@ def main():
         ol_text_c = (80, 190, 255) if orientation_lock else (160, 100, 230)
         pygame.draw.rect(screen, HOVER_COLOR if ol_hov else ol_bg, orient_lock_rect, border_radius=br)
         pygame.draw.rect(screen, ol_border, orient_lock_rect, 1, border_radius=br)
-        ol_text = "🔒 ORIENTATION LOCKED" if orientation_lock else "🔓 ORIENTATION FREE"
+        ol_text = "ORIENTATION LOCKED" if orientation_lock else "ORIENTATION FREE"
         ol_img = ui_font.render(ol_text, True, ol_text_c)
         screen.blit(ol_img, (orient_lock_rect.centerx - ol_img.get_width() // 2,
                               orient_lock_rect.centery - ol_img.get_height() // 2))
@@ -714,6 +825,14 @@ def main():
         st_img = font.render(tool_status, True, st_color)
         screen.blit(st_img, (cx + cw - st_img.get_width(), tool_status_y))
 
+        # Gripper position input (only when gripper is attached)
+        if current_tool_name == "gripper":
+            grip_lbl_img = font.render("gripper", True, DIM_COLOR)
+            screen.blit(grip_lbl_img, (cx, grip_inp_y + grip_inp_h // 2 - grip_lbl_img.get_height() // 2))
+            grip_input.draw(screen, font, br=sc(4))
+            draw_btn(screen, ui_font, grip_set_rect, "SET",
+                     grip_set_rect.collidepoint(mouse_pos), br=br)
+
         # ── RIGHT PANEL ────────────────────────────────────────────────────
         # Telemetry card
         draw_card(screen, tel_card, br=sc(8))
@@ -748,60 +867,91 @@ def main():
         for i, (txt, fnt, color) in enumerate(j_lines):
             screen.blit(fnt.render(txt, True, color), (col_x2, col_y + i * row_step))
 
-        # Button controls card
-        if selected_input_method == "buttons":
-            draw_card(screen, btn_card, br=sc(8))
-            btn_title = label_font.render("BUTTON CONTROLS", True, HEADER_COLOR)
-            screen.blit(btn_title, (btn_card.centerx - btn_title.get_width() // 2, btn_card.y + sc(14)))
+        # Velocity bars inside tel_card
+        vel_sec_y = col_y + max(len(c_lines), len(j_lines)) * row_step + sc(10)
+        draw_sep(screen, tel_card.x + sc(16), vel_sec_y, tel_card.w - sc(32))
+        vel_hdr = label_font.render("VELOCITY COMMANDS", True, HEADER_COLOR)
+        screen.blit(vel_hdr, (tel_card.centerx - vel_hdr.get_width() // 2, vel_sec_y + sc(8)))
+        bar_labels = ["Vx", "Vy", "Vz", "ωx", "ωy", "ωz"]
+        bar_vals   = list(current_lin_vel) + list(current_ang_vel)
+        bar_maxes  = [l_spd] * 3 + [a_spd] * 3
+        v_bar_h    = sc(12)
+        v_bar_step = sc(22)
+        v_lbl_w    = max(font.size(lbl)[0] for lbl in bar_labels) + sc(12)
+        v_val_w    = font.size("+0.000")[0] + sc(10)
+        v_bar_x    = tel_card.x + sc(14) + v_lbl_w
+        v_bar_w    = tel_card.w - sc(28) - v_lbl_w - v_val_w
+        v_bar_y0   = vel_sec_y + sc(8) + vel_hdr.get_height() + sc(8)
+        for i, (lbl, val, mx) in enumerate(zip(bar_labels, bar_vals, bar_maxes)):
+            by = v_bar_y0 + i * v_bar_step
+            lbl_img = font.render(lbl, True, DIM_COLOR)
+            screen.blit(lbl_img, (tel_card.x + sc(14), by + v_bar_h // 2 - lbl_img.get_height() // 2))
+            pygame.draw.rect(screen, CARD_BG, pygame.Rect(v_bar_x, by, v_bar_w, v_bar_h), border_radius=sc(3))
+            pygame.draw.rect(screen, BORDER_COLOR, pygame.Rect(v_bar_x, by, v_bar_w, v_bar_h), 1, border_radius=sc(3))
+            if mx > 0:
+                fill_w = int(v_bar_w * min(abs(val) / mx, 1.0))
+                if fill_w > 0:
+                    pygame.draw.rect(screen, ACCENT_COLOR if val >= 0 else (220, 80, 80),
+                                     pygame.Rect(v_bar_x, by, fill_w, v_bar_h), border_radius=sc(3))
+            val_img = font.render(f"{val:+.3f}", True, TEXT_COLOR)
+            screen.blit(val_img, (v_bar_x + v_bar_w + sc(6), by + v_bar_h // 2 - val_img.get_height() // 2))
 
-            # Group background cards
-            for gx, gy, gw, gh in (BTN_GROUP_LINEAR, BTN_GROUP_ROTATION):
-                grect = pygame.Rect(sc(gx), sc(gy), sc(gw), sc(gh))
-                pygame.draw.rect(screen, (22, 24, 36), grect, border_radius=sc(10))
-                pygame.draw.rect(screen, BORDER_COLOR, grect, 1, border_radius=sc(10))
 
-            # Group labels
-            lin_lbl  = sec_font.render("TRANSLATION", True, DIM_COLOR)
-            rot_lbl  = sec_font.render("ROTATION", True, DIM_COLOR)
-            lin_cx = sc(BTN_GROUP_LINEAR[0])   + sc(BTN_GROUP_LINEAR[2]) // 2
-            rot_cx = sc(BTN_GROUP_ROTATION[0]) + sc(BTN_GROUP_ROTATION[2]) // 2
-            lbl_y  = sc(BTN_GROUP_LINEAR[1]) - lin_lbl.get_height() - sc(4)
-            screen.blit(lin_lbl, (lin_cx - lin_lbl.get_width() // 2, lbl_y))
-            screen.blit(rot_lbl, (rot_cx - rot_lbl.get_width() // 2, lbl_y))
+        # Move to target card
+        draw_card(screen, btn_card, br=sc(8))
+        mot_title = label_font.render("MOVE TO TARGET", True, HEADER_COLOR)
+        screen.blit(mot_title, (btn_card.centerx - mot_title.get_width() // 2, y_start))
 
-            for b in btns:
-                b.draw(screen, label_font, br=sc(6))
-        else:
-            # Velocity bars (visual feedback) in the lower card
-            draw_card(screen, btn_card, br=sc(8))
-            vel_title = label_font.render("VELOCITY FEEDBACK", True, HEADER_COLOR)
-            screen.blit(vel_title, (btn_card.centerx - vel_title.get_width() // 2, btn_card.y + sc(14)))
+        draw_btn(screen, ui_font, cart_mode_rect, "Cartesian",
+                 cart_mode_rect.collidepoint(mouse_pos), active=(motion_mode == "cartesian"), br=br)
+        draw_btn(screen, ui_font, joint_mode_rect, "Joint",
+                 joint_mode_rect.collidepoint(mouse_pos), active=(motion_mode == "joint"), br=br)
 
-            bar_labels = ["Vx", "Vy", "Vz", "ωx", "ωy", "ωz"]
-            bar_vals   = list(current_lin_vel) + list(current_ang_vel)
-            bar_maxes  = [l_spd] * 3 + [a_spd] * 3
-            bar_h    = sc(18)
-            bar_step = sc(34)
-            lbl_w  = max(font.size(lbl)[0] for lbl in bar_labels) + sc(12)
-            val_w  = font.size("+0.000")[0] + sc(10)
-            bar_x  = btn_card.x + sc(14) + lbl_w
-            bar_w  = btn_card.w - sc(28) - lbl_w - val_w
-            bar_y0 = btn_card.y + sc(56)
-            for i, (lbl, val, mx) in enumerate(zip(bar_labels, bar_vals, bar_maxes)):
-                by = bar_y0 + i * bar_step
-                lbl_img = font.render(lbl, True, DIM_COLOR)
-                screen.blit(lbl_img, (btn_card.x + sc(14), by + bar_h // 2 - lbl_img.get_height() // 2))
-                pygame.draw.rect(screen, CARD_BG, pygame.Rect(bar_x, by, bar_w, bar_h), border_radius=sc(3))
-                pygame.draw.rect(screen, BORDER_COLOR, pygame.Rect(bar_x, by, bar_w, bar_h), 1, border_radius=sc(3))
-                if mx > 0:
-                    frac = abs(val) / mx
-                    fill_w = int(bar_w * min(frac, 1.0))
-                    bar_color = ACCENT_COLOR if val >= 0 else (220, 80, 80)
-                    if fill_w > 0:
-                        pygame.draw.rect(screen, bar_color,
-                                         pygame.Rect(bar_x, by, fill_w, bar_h), border_radius=sc(3))
-                val_img = font.render(f"{val:+.3f}", True, TEXT_COLOR)
-                screen.blit(val_img, (bar_x + bar_w + sc(6), by + bar_h // 2 - val_img.get_height() // 2))
+        inp_labels = (
+            ["X (m)", "Y (m)", "Z (m)", "Roll", "Pitch", "Yaw"]
+            if motion_mode == "cartesian" else
+            ["q1", "q2", "q3", "q4", "q5", "q6"]
+        )
+        for i, (inp, lbl) in enumerate(zip(move_inputs, inp_labels)):
+            col = i // 3
+            row = i % 3
+            lbl_x = mcx + col * (col_w + sc(10))
+            lbl_y = inp_y0 + row * (inp_h + inp_gap)
+            lbl_img = font.render(lbl, True, DIM_COLOR)
+            screen.blit(lbl_img, (lbl_x, lbl_y + inp_h // 2 - lbl_img.get_height() // 2))
+            inp.draw(screen, font, br=sc(4))
+
+        if motion_mode == "cartesian" and lin_toggle_rect is not None:
+            lt_hov = lin_toggle_rect.collidepoint(mouse_pos)
+            lt_bg     = (22, 60, 38) if enforce_linearity else (50, 30, 22)
+            lt_border = (0, 180, 90)  if enforce_linearity else (200, 110, 40)
+            lt_text_c = (0, 210, 110) if enforce_linearity else (230, 140, 60)
+            pygame.draw.rect(screen, HOVER_COLOR if lt_hov else lt_bg, lin_toggle_rect, border_radius=br)
+            pygame.draw.rect(screen, lt_border, lin_toggle_rect, 1, border_radius=br)
+            lt_text = "Enforce Linearity: ON" if enforce_linearity else "Enforce Linearity: OFF"
+            lt_img = ui_font.render(lt_text, True, lt_text_c)
+            screen.blit(lt_img, (lin_toggle_rect.centerx - lt_img.get_width() // 2,
+                                 lin_toggle_rect.centery - lt_img.get_height() // 2))
+
+        moving = move_thread is not None and move_thread.is_alive()
+        draw_btn(screen, ui_font, move_btn_rect,
+                 "MOVING..." if moving else "MOVE",
+                 move_btn_rect.collidepoint(mouse_pos) and not moving,
+                 active=not moving, br=br)
+        draw_btn(screen, ui_font, use_cur_rect, "USE CURRENT",
+                 use_cur_rect.collidepoint(mouse_pos), br=br)
+
+        if move_status:
+            if "Error" in move_status or "Failed" in move_status:
+                ms_color = (220, 100, 80)
+            elif "Done" in move_status:
+                ms_color = (0, 190, 110)
+            elif "Moving" in move_status:
+                ms_color = ACCENT_COLOR
+            else:
+                ms_color = DIM_COLOR
+            ms_img = font.render(move_status, True, ms_color)
+            screen.blit(ms_img, (mcx, motion_status_y))
 
         # ── DROPDOWN OVERLAYS (drawn last) ─────────────────────────────────
         if input_dropdown_open:

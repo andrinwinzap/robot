@@ -11,6 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
+    package_data={'robot_api': ['*.png']},
     install_requires=['setuptools', 'scipy'],
     zip_safe=True,
     maintainer='andrin',

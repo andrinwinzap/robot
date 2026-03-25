@@ -319,6 +319,7 @@ def main():
     gripper_speed  = GRIPPER_SPD_DEFAULT
     fake_mode      = args.fake_hardware
     orientation_lock = False
+    idle_mode = False
     gripper_pos    = 0.0
     last_sent_gripper_pos = None
     current_lin_vel = np.zeros(3)
@@ -404,7 +405,8 @@ def main():
         ctrl_y      = lp.y + sc(16)
         hw_rect          = pygame.Rect(cx, ctrl_y + sc(20), cw, row_h)
         orient_lock_rect = pygame.Rect(cx, hw_rect.bottom + row_gap, cw, row_h)
-        input_rect       = pygame.Rect(cx, orient_lock_rect.bottom + row_gap, cw, row_h)
+        idle_mode_rect   = pygame.Rect(cx, orient_lock_rect.bottom + row_gap, cw, row_h)
+        input_rect       = pygame.Rect(cx, idle_mode_rect.bottom + row_gap, cw, row_h)
         if selected_input_method == "controller":
             mapping_rect = pygame.Rect(cx, input_rect.bottom + row_gap, cw, row_h)
             legend_y = mapping_rect.bottom + sc(12)
@@ -557,6 +559,10 @@ def main():
                     elif orient_lock_rect.collidepoint(ep):
                         orientation_lock = not orientation_lock
                         hc = True
+                    elif idle_mode_rect.collidepoint(ep):
+                        idle_mode = not idle_mode
+                        robot.set_idle_mode(idle_mode)
+                        hc = True
                     elif input_rect.collidepoint(ep):
                         input_dropdown_open = not input_dropdown_open
                         mapping_dropdown_open = False
@@ -708,9 +714,13 @@ def main():
 
         if orientation_lock:
             target_ang_vel = np.zeros(3)
-        current_lin_vel = limit_acceleration(current_lin_vel, target_lin_vel, max_lin_accel, dt_sec)
-        current_ang_vel = limit_acceleration(current_ang_vel, target_ang_vel, max_ang_accel, dt_sec)
-        robot.cartesian_space.twist(tuple(current_lin_vel), tuple(current_ang_vel))
+        if not idle_mode:
+            current_lin_vel = limit_acceleration(current_lin_vel, target_lin_vel, max_lin_accel, dt_sec)
+            current_ang_vel = limit_acceleration(current_ang_vel, target_ang_vel, max_ang_accel, dt_sec)
+            robot.cartesian_space.twist(tuple(current_lin_vel), tuple(current_ang_vel))
+        else:
+            current_lin_vel = np.zeros(3)
+            current_ang_vel = np.zeros(3)
 
         if last_sent_gripper_pos is None or abs(gripper_pos - last_sent_gripper_pos) > 1e-4:
             try:
@@ -756,6 +766,18 @@ def main():
         ol_img = ui_font.render(ol_text, True, ol_text_c)
         screen.blit(ol_img, (orient_lock_rect.centerx - ol_img.get_width() // 2,
                               orient_lock_rect.centery - ol_img.get_height() // 2))
+
+        # Idle mode toggle
+        im_hov = idle_mode_rect.collidepoint(mouse_pos)
+        im_bg     = (70, 45, 10) if idle_mode else (25, 55, 30)
+        im_border = (220, 140, 30) if idle_mode else (0, 170, 80)
+        im_text_c = (255, 175, 50) if idle_mode else (0, 215, 100)
+        pygame.draw.rect(screen, HOVER_COLOR if im_hov else im_bg, idle_mode_rect, border_radius=br)
+        pygame.draw.rect(screen, im_border, idle_mode_rect, 1, border_radius=br)
+        im_text = "● IDLE" if idle_mode else "● ACTIVE"
+        im_img = ui_font.render(im_text, True, im_text_c)
+        screen.blit(im_img, (idle_mode_rect.centerx - im_img.get_width() // 2,
+                              idle_mode_rect.centery - im_img.get_height() // 2))
 
         # Input method dropdown
         draw_dropdown(screen, ui_font, input_rect,

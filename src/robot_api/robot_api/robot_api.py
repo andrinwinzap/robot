@@ -101,6 +101,15 @@ class Robot:
             raise RuntimeError("Failed to set simulation mode")
         self._fake_hardware = value
 
+    def set_idle_mode(self, value: bool):
+        if value:
+            self.cartesian_space._stop_twist_timer()
+            active = [c for c in ["joint_trajectory_controller", "joint_velocity_controller"]
+                      if self._controller_type == c]
+            if active:
+                self._switch_controllers(start=[], stop=active)
+                self._controller_type = None
+
     def set_debug_mode(self, value):
         if value:
             self.node.get_logger().set_level(LoggingSeverity.DEBUG)

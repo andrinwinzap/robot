@@ -34,7 +34,7 @@
     </inertial>
   </link>
   <joint name="world_frame" type="fixed">
-    <origin xyz="-0.35 0.174521 0.012" rpy="-0 -0 -1.5708" />
+    <origin xyz="-0.35 0.174521 0.012" rpy="0 0 -1.5708" />
     <parent link="base_plate" />
     <child link="world" />
     <axis xyz="0 0 0" />
@@ -44,11 +44,11 @@
     <inertial>
       <origin xyz="-0.0537231 8.6932e-08 0.0491927" rpy="0 0 0" />
       <mass value="0.6334" />
-      <inertia ixx="0.00084659" ixy="-5.28381e-07" ixz="0.000283968" iyy="0.00107102" iyz="1.16595e-07" izz="0.00100843" />
+      <inertia ixx="0.00084659" ixy="3.23685e-07" ixz="0.000284172" iyy="0.00107114" iyz="-1.13725e-07" izz="0.00100831" />
     </inertial>
     
     <visual>
-      <origin xyz="-0.0537231 8.6932e-08 0.0491927" rpy="0 0 -0" />
+      <origin xyz="-0.0537231 8.6932e-08 0.0491927" rpy="-0 -0 -0" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_2_visual.stl" />
       </geometry>
@@ -57,7 +57,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.0537231 8.6932e-08 0.0491927" rpy="0 0 -0" />
+      <origin xyz="-0.0537231 8.6932e-08 0.0491927" rpy="-0 -0 -0" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_2_collision.stl" />
       </geometry>
@@ -68,11 +68,11 @@
     <inertial>
       <origin xyz="-0.129822 -1.50933e-07 0.0184438" rpy="0 0 0" />
       <mass value="0.700953" />
-      <inertia ixx="0.00101756" ixy="6.29e-09" ixz="-0.000683953" iyy="0.00525046" iyz="3.74633e-07" izz="0.00498993" />
+      <inertia ixx="0.00101744" ixy="-2.8805e-08" ixz="-0.000684311" iyy="0.00525058" iyz="-9.9625e-08" izz="0.00498993" />
     </inertial>
     
     <visual>
-      <origin xyz="-0.129822 -1.50933e-07 0.0184438" rpy="3.14159 1.5708 0" />
+      <origin xyz="-0.129822 -1.50933e-07 0.0184438" rpy="-3.14159 1.5708 0" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_3_visual.stl" />
       </geometry>
@@ -81,7 +81,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.129822 -1.50933e-07 0.0184438" rpy="3.14159 1.5708 0" />
+      <origin xyz="-0.129822 -1.50933e-07 0.0184438" rpy="-3.14159 1.5708 0" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_3_collision.stl" />
       </geometry>
@@ -162,13 +162,13 @@
   
   <link name="link_7">
     <inertial>
-      <origin xyz="-0.000401815 0.000524596 0.0228673" rpy="0 0 0" />
+      <origin xyz="-0.000389545 0.00053331 0.0228424" rpy="0 0 0" />
       <mass value="0.133959" />
-      <inertia ixx="4.39467e-05" ixy="-1.99937e-07" ixz="-3.02671e-07" iyy="4.50739e-05" iyz="-2.55759e-07" izz="4.98839e-05" />
+      <inertia ixx="4.40087e-05" ixy="-2.07993e-07" ixz="-3.16349e-07" iyy="4.50898e-05" iyz="-2.16068e-07" izz="4.9884e-05" />
     </inertial>
     
     <visual>
-      <origin xyz="-0.000401815 0.000524596 0.0228673" rpy="0 -0 1.5708" />
+      <origin xyz="-0.000389545 0.00053331 0.0228424" rpy="0 0 1.5708" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_7_visual.stl" />
       </geometry>
@@ -177,7 +177,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.000401815 0.000524596 0.0228673" rpy="0 -0 1.5708" />
+      <origin xyz="-0.000389545 0.00053331 0.0228424" rpy="0 0 1.5708" />
       <geometry>
         <mesh filename="package://robot_description/meshes/link_7_collision.stl" />
       </geometry>
@@ -193,7 +193,7 @@
   </joint>
   
   <joint name="joint_5" type="revolute">
-    <origin xyz="0 0 0.124" rpy="0 1.5708 0" />
+    <origin xyz="-0 -0 0.124" rpy="0 1.5708 0" />
     <parent link="link_5" />
     <child link="link_6" />
     <axis xyz="0 0 1" />
@@ -225,7 +225,7 @@
   </joint>
   
   <joint name="joint_1" type="revolute">
-    <origin xyz="-0 0.174521 0.1545" rpy="-0 -0 0" />
+    <origin xyz="-0 0.174521 0.1545" rpy="0 0 0" />
     <parent link="base_plate" />
     <child link="link_2" />
     <axis xyz="0 0 1" />
@@ -240,11 +240,10 @@
     <limit effort="10" velocity="10" />
   </joint>
   
-<ros2_control name="robot" type="system">
+  <ros2_control name="robot" type="system">
     <hardware>
       <plugin>robot_hardware/RobotSystem</plugin>
     </hardware>
-
     <joint name="joint_1">
       <command_interface name="position">
         <param name="min">${-pi}</param>
@@ -257,9 +256,8 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-
     <joint name="joint_2">
       <command_interface name="position">
         <param name="min">${-pi}</param>
@@ -272,9 +270,8 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-
     <joint name="joint_3">
       <command_interface name="position">
         <param name="min">${-pi}</param>
@@ -287,9 +284,8 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-
     <joint name="joint_4">
       <command_interface name="position">
         <param name="min">${-pi}</param>
@@ -302,9 +298,8 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-
     <joint name="joint_5">
       <command_interface name="position">
         <param name="min">${-pi/2}</param>
@@ -317,9 +312,8 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-
     <joint name="joint_6">
       <command_interface name="position">
         <param name="min">${-pi}</param>
@@ -332,8 +326,7 @@
       <state_interface name="position">
         <param name="initial_value">0.0</param>
       </state_interface>
-      <state_interface name="velocity"/>
+      <state_interface name="velocity" />
     </joint>
-    
   </ros2_control>
 </robot>

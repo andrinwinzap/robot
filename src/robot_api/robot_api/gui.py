@@ -532,7 +532,7 @@ def main():
         grip_set_rect    = pygame.Rect(cx + grip_inp_lbl_w + grip_inp_w + sc(7), grip_inp_y, grip_set_w, grip_inp_h)
 
         # Telemetry card (top of right panel)
-        tel_card = pygame.Rect(rp.x + sc(14), rp.y + sc(14), rp.w - sc(28), sc(480))
+        tel_card = pygame.Rect(rp.x + sc(14), rp.y + sc(14), rp.w - sc(28), sc(310))
         btn_card = pygame.Rect(rp.x + sc(14), tel_card.bottom + sc(14), rp.w - sc(28),
                                rp.bottom - tel_card.bottom - sc(28))
 
@@ -1029,34 +1029,6 @@ def main():
         for i, (txt, fnt, color) in enumerate(j_lines):
             screen.blit(fnt.render(txt, True, color), (col_x2, col_y + i * row_step))
 
-        # Velocity bars inside tel_card
-        vel_sec_y = col_y + max(len(c_lines), len(j_lines)) * row_step + sc(10)
-        draw_sep(screen, tel_card.x + sc(16), vel_sec_y, tel_card.w - sc(32))
-        vel_hdr = label_font.render("VELOCITY COMMANDS", True, HEADER_COLOR)
-        screen.blit(vel_hdr, (tel_card.centerx - vel_hdr.get_width() // 2, vel_sec_y + sc(8)))
-        bar_labels = ["Vx", "Vy", "Vz", "ωx", "ωy", "ωz"]
-        bar_vals   = list(current_lin_vel) + list(current_ang_vel)
-        bar_maxes  = [l_spd] * 3 + [a_spd] * 3
-        v_bar_h    = sc(12)
-        v_bar_step = sc(22)
-        v_lbl_w    = max(font.size(lbl)[0] for lbl in bar_labels) + sc(12)
-        v_val_w    = font.size("+0.000")[0] + sc(10)
-        v_bar_x    = tel_card.x + sc(14) + v_lbl_w
-        v_bar_w    = tel_card.w - sc(28) - v_lbl_w - v_val_w
-        v_bar_y0   = vel_sec_y + sc(8) + vel_hdr.get_height() + sc(8)
-        for i, (lbl, val, mx) in enumerate(zip(bar_labels, bar_vals, bar_maxes)):
-            by = v_bar_y0 + i * v_bar_step
-            lbl_img = font.render(lbl, True, DIM_COLOR)
-            screen.blit(lbl_img, (tel_card.x + sc(14), by + v_bar_h // 2 - lbl_img.get_height() // 2))
-            pygame.draw.rect(screen, CARD_BG, pygame.Rect(v_bar_x, by, v_bar_w, v_bar_h), border_radius=sc(3))
-            pygame.draw.rect(screen, BORDER_COLOR, pygame.Rect(v_bar_x, by, v_bar_w, v_bar_h), 1, border_radius=sc(3))
-            if mx > 0:
-                fill_w = int(v_bar_w * min(abs(val) / mx, 1.0))
-                if fill_w > 0:
-                    pygame.draw.rect(screen, ACCENT_COLOR if val >= 0 else (220, 80, 80),
-                                     pygame.Rect(v_bar_x, by, fill_w, v_bar_h), border_radius=sc(3))
-            val_img = font.render(f"{val:+.3f}", True, TEXT_COLOR)
-            screen.blit(val_img, (v_bar_x + v_bar_w + sc(6), by + v_bar_h // 2 - val_img.get_height() // 2))
 
 
         # Move to target card

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import threading
 
@@ -176,11 +177,12 @@ def apply_mapping(joystick, mapping_key, l_spd, a_spd):
 
 
 class TextInput:
-    def __init__(self, text="0.0000"):
+    def __init__(self, text="0.0000", numeric_only=True):
         self.text = text
         self.rect = pygame.Rect(0, 0, 0, 0)
         self.focused = False
         self.cursor = len(text)
+        self.numeric_only = numeric_only
 
     def handle_key(self, event):
         if event.key == pygame.K_BACKSPACE:
@@ -200,7 +202,10 @@ class TextInput:
             self.cursor = len(self.text)
         elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
             self.focused = False
-        elif event.unicode in "0123456789.-":
+        elif self.numeric_only and event.unicode in "0123456789.-":
+            self.text = self.text[:self.cursor] + event.unicode + self.text[self.cursor:]
+            self.cursor += 1
+        elif not self.numeric_only and event.unicode and event.unicode.isprintable():
             self.text = self.text[:self.cursor] + event.unicode + self.text[self.cursor:]
             self.cursor += 1
 
@@ -259,6 +264,42 @@ def draw_btn(surf, font, rect, text, hovered, active=False, danger=False, attach
     surf.blit(img, (rect.centerx - img.get_width() // 2, rect.centery - img.get_height() // 2))
 
 
+def draw_icon_btn(surf, rect, hovered, icon, danger=False, active=False, br=6):
+    if danger:
+        bg = DANGER_HOVER if hovered else DANGER_BG
+        border = DANGER_BORDER
+        color = (255, 190, 180)
+    elif active:
+        bg = (0, 105, 185) if not hovered else BTN_ACTIVE
+        border = BTN_ACTIVE
+        color = TEXT_COLOR
+    else:
+        bg = HOVER_COLOR if hovered else BTN_COLOR
+        border = BORDER_COLOR
+        color = DIM_COLOR
+    pygame.draw.rect(surf, bg, rect, border_radius=br)
+    pygame.draw.rect(surf, border, rect, 1, border_radius=br)
+    cx, cy = rect.centerx, rect.centery
+    pad = max(5, rect.w // 4)
+    lw = max(1, rect.w // 14)
+    if icon == "delete":
+        # X mark
+        x0, y0 = rect.x + pad, rect.y + pad
+        x1, y1 = rect.right - pad, rect.bottom - pad
+        pygame.draw.line(surf, color, (x0, y0), (x1, y1), lw + 1)
+        pygame.draw.line(surf, color, (x1, y0), (x0, y1), lw + 1)
+    elif icon == "edit":
+        sz = max(4, min(rect.w, rect.h) // 2 - pad)
+        lw2 = max(2, lw + 1)
+        pygame.draw.line(surf, color, (cx - sz, cy + sz), (cx + sz, cy - sz), lw2)
+        nib = max(2, sz // 3)
+        pygame.draw.polygon(surf, color, [
+            (cx + sz,       cy - sz),
+            (cx + sz + nib, cy - sz - nib),
+            (cx + sz + nib, cy - sz),
+        ])
+
+
 def draw_dropdown(surf, font, rect, text, is_open, hovered, br=6):
     bg = HOVER_COLOR if hovered else BTN_COLOR
     border = ACCENT_COLOR if is_open else BORDER_COLOR
@@ -280,6 +321,25 @@ def draw_dropdown_menu(surf, font, anchor_rect, options, selected, hovered_pos, 
         pygame.draw.rect(surf, BORDER_COLOR, opt, 1, border_radius=br)
         img = font.render(text, True, TEXT_COLOR if not is_sel else ACCENT_COLOR)
         surf.blit(img, (opt.x + 10, opt.centery - img.get_height() // 2))
+
+
+POSITIONS_FILE = os.path.expanduser("~/.robot_saved_positions.json")
+
+
+def load_positions():
+    try:
+        with open(POSITIONS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_positions_to_file(positions):
+    try:
+        with open(POSITIONS_FILE, "w") as f:
+            json.dump(positions, f, indent=2)
+    except Exception:
+        pass
 
 
 def draw_section_label(surf, font, text, x, y):
@@ -355,6 +415,11 @@ def main():
     focused_input = None
     move_thread   = None
     move_status   = ""
+
+    saved_positions = load_positions()
+    save_name_input = TextInput("pos_1", numeric_only=False)
+    saved_scroll    = 0
+    editing_idx     = None  # index of saved position being edited, or None for new
 
     def do_move():
         nonlocal move_status
@@ -512,6 +577,26 @@ def main():
         use_cur_rect  = pygame.Rect(mcx + move_btn_w_px + sc(7), move_btn_y, use_cur_w, row_h)
         motion_status_y = move_btn_y + row_h + sc(8)
 
+        # Saved positions section (inside btn_card, below move status)
+        saved_sec_y      = motion_status_y + sc(26)
+        saved_row_h      = sc(30)
+        save_name_w      = int(mcw * 0.55)
+        save_btns_w      = mcw - save_name_w - sc(7)
+        save_name_input.rect = pygame.Rect(mcx, saved_sec_y + sc(22), save_name_w, saved_row_h)
+        save_btn_w      = (save_btns_w - sc(5)) // 2
+        cancel_btn_w    = save_btns_w - save_btn_w - sc(5)
+        save_btn_rect   = pygame.Rect(mcx + save_name_w + sc(7), saved_sec_y + sc(22), save_btn_w, saved_row_h)
+        cancel_btn_rect = pygame.Rect(save_btn_rect.right + sc(5), saved_sec_y + sc(22), cancel_btn_w, saved_row_h)
+        save_btn_full_rect = pygame.Rect(mcx + save_name_w + sc(7), saved_sec_y + sc(22), save_btns_w, saved_row_h)
+        saved_list_y     = save_name_input.rect.bottom + sc(6)
+        saved_item_h     = sc(32)
+        saved_go_w       = sc(44)
+        saved_edt_w      = sc(50)
+        saved_del_w      = sc(36)
+        saved_name_col_w = mcw - saved_go_w - saved_edt_w - saved_del_w - sc(21) - sc(12)
+        saved_area       = pygame.Rect(mcx, saved_list_y, mcw, btn_card.bottom - sc(14) - saved_list_y)
+        saved_visible    = max(1, saved_area.h // saved_item_h)
+
         mouse_pos = pygame.mouse.get_pos()
 
         # --- EVENT HANDLING ---
@@ -656,7 +741,7 @@ def main():
             # Text input focus management
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and ep is not None:
                 clicked_on_input = False
-                for inp in list(move_inputs) + [grip_input]:
+                for inp in list(move_inputs) + [grip_input, save_name_input]:
                     if inp.rect.collidepoint(ep):
                         clicked_on_input = True
                         if focused_input is not inp:
@@ -677,6 +762,61 @@ def main():
                         gripper_pos = val
                     except RuntimeError:
                         pass
+
+            # Saved positions buttons
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and ep is not None:
+                clicked_save = (
+                    (editing_idx is not None and save_btn_rect.collidepoint(ep)) or
+                    (editing_idx is None and save_btn_full_rect.collidepoint(ep))
+                )
+                if clicked_save:
+                    name = save_name_input.text.strip() or f"pos_{len(saved_positions) + 1}"
+                    vals = [inp.get_float() for inp in move_inputs]
+                    if editing_idx is not None and 0 <= editing_idx < len(saved_positions):
+                        saved_positions[editing_idx] = {"name": name, "mode": motion_mode, "values": vals}
+                        editing_idx = None
+                    else:
+                        saved_positions.append({"name": name, "mode": motion_mode, "values": vals})
+                    save_positions_to_file(saved_positions)
+                    save_name_input.text = f"pos_{len(saved_positions) + 1}"
+                    save_name_input.cursor = len(save_name_input.text)
+                elif cancel_btn_rect.collidepoint(ep) and editing_idx is not None:
+                    editing_idx = None
+                    save_name_input.text = f"pos_{len(saved_positions) + 1}"
+                    save_name_input.cursor = len(save_name_input.text)
+                elif saved_area.collidepoint(ep):
+                    rel_y = ep[1] - saved_list_y
+                    idx = saved_scroll + rel_y // saved_item_h
+                    if 0 <= idx < len(saved_positions):
+                        item_y  = saved_list_y + (idx - saved_scroll) * saved_item_h
+                        go_rect  = pygame.Rect(mcx + saved_name_col_w + sc(7), item_y + sc(1), saved_go_w, saved_item_h - sc(2))
+                        edt_rect = pygame.Rect(go_rect.right + sc(7), item_y + sc(1), saved_edt_w, saved_item_h - sc(2))
+                        del_rect = pygame.Rect(edt_rect.right + sc(7), item_y + sc(1), saved_del_w, saved_item_h - sc(2))
+                        if go_rect.collidepoint(ep):
+                            for inp, v in zip(move_inputs, saved_positions[idx]["values"]):
+                                inp.text = f"{v:.4f}"
+                                inp.cursor = len(inp.text)
+                            motion_mode = saved_positions[idx]["mode"]
+                        elif edt_rect.collidepoint(ep):
+                            editing_idx = idx
+                            save_name_input.text = saved_positions[idx]["name"]
+                            save_name_input.cursor = len(save_name_input.text)
+                            for inp, v in zip(move_inputs, saved_positions[idx]["values"]):
+                                inp.text = f"{v:.4f}"
+                                inp.cursor = len(inp.text)
+                            motion_mode = saved_positions[idx]["mode"]
+                        elif del_rect.collidepoint(ep):
+                            if editing_idx == idx:
+                                editing_idx = None
+                                save_name_input.text = f"pos_{len(saved_positions)}"
+                                save_name_input.cursor = len(save_name_input.text)
+                            saved_positions.pop(idx)
+                            save_positions_to_file(saved_positions)
+                            saved_scroll = max(0, min(saved_scroll, len(saved_positions) - saved_visible))
+
+            # Scroll saved list with mouse wheel
+            if event.type == pygame.MOUSEWHEEL and saved_area.collidepoint(mouse_pos):
+                saved_scroll = max(0, min(saved_scroll - event.y, max(0, len(saved_positions) - saved_visible)))
 
             if event.type == pygame.KEYDOWN and focused_input is not None:
                 focused_input.handle_key(event)
@@ -974,6 +1114,60 @@ def main():
                 ms_color = DIM_COLOR
             ms_img = font.render(move_status, True, ms_color)
             screen.blit(ms_img, (mcx, motion_status_y))
+
+        # ── SAVED POSITIONS ────────────────────────────────────────────────
+        draw_sep(screen, mcx, saved_sec_y - sc(8), mcw)
+        draw_section_label(screen, sec_font, "SAVED POSITIONS", mcx, saved_sec_y)
+        save_name_input.draw(screen, font, br=sc(4))
+        if editing_idx is not None:
+            draw_btn(screen, ui_font, save_btn_rect, "UPDATE",
+                     save_btn_rect.collidepoint(mouse_pos), active=True, br=br)
+            draw_btn(screen, ui_font, cancel_btn_rect, "CANCEL",
+                     cancel_btn_rect.collidepoint(mouse_pos), br=br)
+        else:
+            draw_btn(screen, ui_font, save_btn_full_rect, "SAVE",
+                     save_btn_full_rect.collidepoint(mouse_pos), br=br)
+
+        # Clip saved list to its area
+        clip_rect = screen.get_clip()
+        screen.set_clip(saved_area)
+        for i in range(saved_visible):
+            idx = saved_scroll + i
+            if idx >= len(saved_positions):
+                break
+            entry   = saved_positions[idx]
+            item_y  = saved_list_y + i * saved_item_h
+            row_bg   = pygame.Rect(mcx, item_y + sc(1), mcw, saved_item_h - sc(2))
+            go_rect  = pygame.Rect(mcx + saved_name_col_w + sc(7), item_y + sc(1), saved_go_w, saved_item_h - sc(2))
+            edt_rect = pygame.Rect(go_rect.right + sc(7), item_y + sc(1), saved_edt_w, saved_item_h - sc(2))
+            del_rect = pygame.Rect(edt_rect.right + sc(7), item_y + sc(1), saved_del_w, saved_item_h - sc(2))
+            is_editing = (idx == editing_idx)
+            row_bg_color     = (22, 38, 60) if is_editing else CARD_BG
+            row_border_color = ACCENT_COLOR if is_editing else BORDER_COLOR
+            pygame.draw.rect(screen, row_bg_color, row_bg, border_radius=sc(4))
+            pygame.draw.rect(screen, row_border_color, row_bg, 1, border_radius=sc(4))
+            mode_tag = "C" if entry["mode"] == "cartesian" else "J"
+            tag_color = ACCENT_COLOR if entry["mode"] == "cartesian" else (180, 120, 255)
+            tag_img = sec_font.render(mode_tag, True, tag_color)
+            screen.blit(tag_img, (mcx + sc(6), item_y + saved_item_h // 2 - tag_img.get_height() // 2))
+            name_img = font.render(entry["name"], True, TEXT_COLOR)
+            screen.blit(name_img, (mcx + sc(6) + tag_img.get_width() + sc(8),
+                                   item_y + saved_item_h // 2 - name_img.get_height() // 2))
+            draw_btn(screen, sec_font, go_rect, "GO", go_rect.collidepoint(mouse_pos), attach=True, br=sc(4))
+            draw_btn(screen, sec_font, edt_rect, "EDIT", edt_rect.collidepoint(mouse_pos), active=is_editing, br=sc(4))
+            draw_icon_btn(screen, del_rect, del_rect.collidepoint(mouse_pos), "delete", danger=True, br=sc(4))
+        screen.set_clip(clip_rect)
+
+        # Scroll indicator
+        if len(saved_positions) > saved_visible:
+            total = len(saved_positions)
+            track_h = saved_area.h
+            thumb_h = max(sc(20), int(track_h * saved_visible / total))
+            thumb_y = saved_area.y + int((track_h - thumb_h) * saved_scroll / max(1, total - saved_visible))
+            pygame.draw.rect(screen, BORDER_COLOR,
+                             pygame.Rect(saved_area.right - sc(4), saved_area.y, sc(4), track_h), border_radius=sc(2))
+            pygame.draw.rect(screen, DIM_COLOR,
+                             pygame.Rect(saved_area.right - sc(4), thumb_y, sc(4), thumb_h), border_radius=sc(2))
 
         # ── DROPDOWN OVERLAYS (drawn last) ─────────────────────────────────
         if input_dropdown_open:

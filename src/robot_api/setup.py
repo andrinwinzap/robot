@@ -12,7 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
     ],
     package_data={'robot_api': ['*.png']},
-    install_requires=['setuptools', 'scipy'],
+    install_requires=['setuptools', 'scipy', 'fastapi', 'uvicorn[standard]'],
     zip_safe=True,
     maintainer='andrin',
     maintainer_email='AndrinWinzap@proton.me',

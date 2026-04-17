@@ -30,9 +30,9 @@ ros2 launch robot_bringup robot.launch.py deactivate_microros_agents:=true
 ```
 
 
-### Keyboard Control
+### GUI (Pygame — Legacy)
 
-Start the keyboard control interface:
+Start the pygame desktop GUI:
 
 ```bash
 python3 -m robot_api.gui
@@ -43,3 +43,19 @@ Run with simulated hardware:
 ```bash
 python3 -m robot_api.gui --fake-hardware
 ```
+
+### GUI (Web)
+
+Start the browser-based GUI (requires `fastapi` and `uvicorn[standard]`):
+
+```bash
+python3 -m robot_api.gui_web
+```
+
+Run with simulated hardware or a custom port:
+
+```bash
+python3 -m robot_api.gui_web --fake-hardware --port 8080
+```
+
+The server opens at `http://localhost:8080` automatically.

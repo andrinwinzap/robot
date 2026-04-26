@@ -1258,7 +1258,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
   .warn { color: #e09c28; font-size: 12px; margin-bottom: 4px; }
   .btn-demo {
     width: 100%;
-    padding: 8px 12px;
+    padding: 7px 12px;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--btn);
@@ -1325,13 +1325,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
       </div>
     </div>
 
-    <hr class="sep"/>
-    <div class="section-label">Demo</div>
-    <button class="btn-demo" id="demo-pick-place">Pick &amp; Place</button>
-    <button class="btn-demo" id="demo-sine">Sine Wave</button>
-    <button class="btn-demo" id="demo-circle">Circle</button>
-    <button class="btn-demo" id="demo-cone">Cone Motion</button>
-    <div class="demo-status" id="demo-status">Idle</div>
   </div>
 
   <!-- RIGHT PANEL -->
@@ -1353,6 +1346,15 @@ HTML_PAGE = r"""<!DOCTYPE html>
 
     <!-- MOVE TO TARGET CARD -->
     <div class="card" id="move-card">
+      <div class="section-label" style="margin-top:0">Demo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <button class="btn-demo" id="demo-pick-place">Pick &amp; Place</button>
+        <button class="btn-demo" id="demo-sine">Sine Wave</button>
+        <button class="btn-demo" id="demo-circle">Circle</button>
+        <button class="btn-demo" id="demo-cone">Cone Motion</button>
+      </div>
+      <div class="demo-status" id="demo-status">Idle</div>
+      <hr class="sep" style="margin-bottom:10px"/>
       <div class="move-title">MOVE TO TARGET</div>
       <div class="mode-btns">
         <button class="mode-btn" id="btn-cart-mode">Cartesian</button>

@@ -739,7 +739,22 @@ def main():
         inputs_h = 3 * inp_h + 2 * inp_gap
         y_start  = btn_card.y + sc(14)
 
-        motion_mode_y     = y_start + sc(22) + sc(10)
+        # Demo section at top of move card
+        demo_btn_h    = sc(30)
+        demo_half_w   = (mcw - sc(7)) // 2
+        demo_btn_y0   = y_start + sc(20)
+        demo_btn_y1   = demo_btn_y0 + demo_btn_h + sc(6)
+        demo_rects    = [
+            pygame.Rect(mcx,                       demo_btn_y0, demo_half_w,                demo_btn_h),
+            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y0, mcw - demo_half_w - sc(7), demo_btn_h),
+            pygame.Rect(mcx,                       demo_btn_y1, demo_half_w,                demo_btn_h),
+            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y1, mcw - demo_half_w - sc(7), demo_btn_h),
+        ]
+        demo_status_y = demo_btn_y1 + demo_btn_h + sc(6)
+        demo_sep_y    = demo_status_y + sc(12)
+        move_title_y  = demo_sep_y + sc(14)
+
+        motion_mode_y     = move_title_y + sc(22) + sc(10)
         motion_mode_btn_w = (mcw - sc(7)) // 2
         cart_mode_rect    = pygame.Rect(mcx, motion_mode_y, motion_mode_btn_w, row_h)
         joint_mode_rect   = pygame.Rect(
@@ -768,23 +783,8 @@ def main():
         use_cur_rect  = pygame.Rect(mcx + move_btn_w_px + sc(7), move_btn_y, use_cur_w, row_h)
         motion_status_y = move_btn_y + row_h + sc(8)
 
-        # Demo section (inside btn_card, below move status)
-        demo_sep_y    = motion_status_y + sc(22)
-        demo_sec_y    = demo_sep_y + sc(14)
-        demo_btn_h    = sc(30)
-        demo_half_w   = (mcw - sc(7)) // 2
-        demo_btn_y0   = demo_sec_y + sc(20)
-        demo_btn_y1   = demo_btn_y0 + demo_btn_h + sc(6)
-        demo_rects    = [
-            pygame.Rect(mcx,                       demo_btn_y0, demo_half_w,                demo_btn_h),
-            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y0, mcw - demo_half_w - sc(7), demo_btn_h),
-            pygame.Rect(mcx,                       demo_btn_y1, demo_half_w,                demo_btn_h),
-            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y1, mcw - demo_half_w - sc(7), demo_btn_h),
-        ]
-        demo_status_y = demo_btn_y1 + demo_btn_h + sc(8)
-
-        # Saved positions section (inside btn_card, below demo section)
-        saved_sec_y      = demo_status_y + sc(18)
+        # Saved positions section (inside btn_card, below move status)
+        saved_sec_y      = motion_status_y + sc(26)
         saved_row_h      = sc(30)
         save_name_w      = int(mcw * 0.55)
         save_btns_w      = mcw - save_name_w - sc(7)
@@ -1254,8 +1254,26 @@ def main():
 
         # Move to target card
         draw_card(screen, btn_card, br=sc(8))
+
+        # ── DEMO SECTION ───────────────────────────────────────────────────
+        draw_section_label(screen, sec_font, "DEMO", mcx, y_start)
+        _demo_running = demo_thread is not None and demo_thread.is_alive()
+        _demo_labels  = ["Pick & Place", "Sine Wave", "Circle", "Cone Motion"]
+        for r, lbl in zip(demo_rects, _demo_labels):
+            hov = r.collidepoint(mouse_pos) and not _demo_running
+            draw_btn(screen, ui_font, r, lbl, hov, br=br)
+        if demo_status:
+            if "Error" in demo_status:
+                _ds_color = (220, 100, 80)
+            elif "Done" in demo_status:
+                _ds_color = (0, 190, 110)
+            else:
+                _ds_color = ACCENT_COLOR
+            screen.blit(font.render(demo_status, True, _ds_color), (mcx, demo_status_y))
+        draw_sep(screen, mcx, demo_sep_y, mcw)
+
         mot_title = label_font.render("MOVE TO TARGET", True, HEADER_COLOR)
-        screen.blit(mot_title, (btn_card.centerx - mot_title.get_width() // 2, y_start))
+        screen.blit(mot_title, (btn_card.centerx - mot_title.get_width() // 2, move_title_y))
 
         draw_btn(screen, ui_font, cart_mode_rect, "Cartesian",
                  cart_mode_rect.collidepoint(mouse_pos), active=(motion_mode == "cartesian"), br=br)
@@ -1307,25 +1325,6 @@ def main():
                 ms_color = DIM_COLOR
             ms_img = font.render(move_status, True, ms_color)
             screen.blit(ms_img, (mcx, motion_status_y))
-
-        # ── DEMO SECTION ───────────────────────────────────────────────────
-        draw_sep(screen, mcx, demo_sep_y, mcw)
-        draw_section_label(screen, sec_font, "DEMO", mcx, demo_sec_y)
-
-        _demo_running = demo_thread is not None and demo_thread.is_alive()
-        _demo_labels  = ["Pick & Place", "Sine Wave", "Circle", "Cone Motion"]
-        for r, lbl in zip(demo_rects, _demo_labels):
-            hov = r.collidepoint(mouse_pos) and not _demo_running
-            draw_btn(screen, ui_font, r, lbl, hov, br=br)
-
-        if demo_status:
-            if "Error" in demo_status:
-                _ds_color = (220, 100, 80)
-            elif "Done" in demo_status:
-                _ds_color = (0, 190, 110)
-            else:
-                _ds_color = ACCENT_COLOR
-            screen.blit(font.render(demo_status, True, _ds_color), (mcx, demo_status_y))
 
         # ── SAVED POSITIONS ────────────────────────────────────────────────
         draw_sep(screen, mcx, saved_sec_y - sc(8), mcw)

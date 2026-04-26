@@ -3,6 +3,9 @@ import json
 import os
 import threading
 
+import math
+import time
+
 import numpy as np
 import pygame
 
@@ -121,6 +124,171 @@ KEYBOARD_LEGEND = [
     "Q / E:         Yaw",
     "O / P:         Gripper",
 ]
+
+
+# ---------------------------------------------------------------------------
+# DEMO FUNCTIONS
+# ---------------------------------------------------------------------------
+
+_DEMO_JOINT_SPEED = 0.1
+_DEMO_LIN_SPEED   = 0.03
+_DEMO_LIN_ACCEL   = 0.03
+
+
+def _demo_pick_and_place(robot):
+    START_X = 0.25;  START_Y = 0.5
+    END_X   = 0.25;  END_Y   = 0.2
+    PICK_PLACE_HEIGHT = 0.03;  TRAVEL_HEIGHT = 0.1;  OBJECT_SIZE = 0.018
+
+    robot.joint_space.speed                 = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed      = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration      = _DEMO_LIN_ACCEL
+
+    robot.tool_changer.attach_tool(robot.tools.gripper)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)), False)
+    robot.tools.gripper.set_distance(0.05)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, PICK_PLACE_HEIGHT), (0, 0, 0)))
+    robot.tools.gripper.set_distance(OBJECT_SIZE)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, PICK_PLACE_HEIGHT), (0, 0, 0)))
+    robot.tools.gripper.set_distance(0.05)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+
+
+def _demo_sine(robot):
+    X0 = 0.175;  Y0 = 0.2;  Z0 = 0.1
+    WAVE_LENGTH = 0.3;  NUM_PERIODS = 2;  WAVE_AMPLITUDE = 0.03;  NUM_POINTS = 50
+
+    robot.joint_space.speed            = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration = _DEMO_LIN_ACCEL
+
+    robot.cartesian_space.move(CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False)
+
+    total_distance = 0.0
+    for i in range(1000):
+        a1, a2 = i / 1000, (i + 1) / 1000
+        x1 = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * a1 * NUM_PERIODS)
+        x2 = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * a2 * NUM_PERIODS)
+        total_distance += np.sqrt((x2 - x1) ** 2 + (WAVE_LENGTH / 1000) ** 2)
+
+    t_accel = _DEMO_LIN_SPEED / _DEMO_LIN_ACCEL
+    d_accel = 0.5 * _DEMO_LIN_ACCEL * t_accel ** 2
+    if 2 * d_accel > total_distance:
+        t_accel = np.sqrt(total_distance / _DEMO_LIN_ACCEL)
+        t_cruise = 0;  d_accel = 0.5 * total_distance;  d_cruise = 0
+        actual_max_speed = _DEMO_LIN_ACCEL * t_accel
+    else:
+        d_cruise = total_distance - 2 * d_accel
+        t_cruise = d_cruise / _DEMO_LIN_SPEED
+        actual_max_speed = _DEMO_LIN_SPEED
+    t_decel = t_accel
+    total_time = t_accel + t_cruise + t_decel
+
+    def trap(t):
+        if t <= t_accel:
+            s = 0.5 * _DEMO_LIN_ACCEL * t ** 2
+        elif t <= t_accel + t_cruise:
+            s = d_accel + actual_max_speed * (t - t_accel)
+        elif t <= total_time:
+            td = t - t_accel - t_cruise
+            s = d_accel + d_cruise + actual_max_speed * td - 0.5 * _DEMO_LIN_ACCEL * td ** 2
+        else:
+            s = total_distance
+        return s / total_distance
+
+    path = CartesianSpace.Path()
+    for i in range(NUM_POINTS):
+        t = (i / (NUM_POINTS - 1)) * total_time
+        alpha = trap(t)
+        y = Y0 + alpha * WAVE_LENGTH
+        x = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * alpha * NUM_PERIODS)
+        path.add(CartesianSpace.Pose(position=(x, y, Z0), orientation=(0, 0, 0), time_from_start=t))
+    robot.cartesian_space.follow_path(path)
+
+
+def _demo_circle(robot):
+    X0 = 0.2;  Y0 = 0.35;  Z0 = 0.1;  RADIUS = 0.07;  NUM_POINTS = 60
+
+    robot.joint_space.speed            = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration = _DEMO_LIN_ACCEL
+
+    robot.cartesian_space.move(CartesianSpace.Pose((X0 + RADIUS, Y0, Z0), (0, 0, 0)), True)
+
+    total_distance = 2 * math.pi * RADIUS
+    t_accel = _DEMO_LIN_SPEED / _DEMO_LIN_ACCEL
+    d_accel = 0.5 * _DEMO_LIN_ACCEL * t_accel ** 2
+    if 2 * d_accel > total_distance:
+        t_accel = math.sqrt(total_distance / _DEMO_LIN_ACCEL)
+        t_cruise = 0;  d_accel = 0.5 * total_distance;  d_cruise = 0
+        actual_max_speed = _DEMO_LIN_ACCEL * t_accel
+    else:
+        d_cruise = total_distance - 2 * d_accel
+        t_cruise = d_cruise / _DEMO_LIN_SPEED
+        actual_max_speed = _DEMO_LIN_SPEED
+    t_decel = t_accel
+    total_time = t_accel + t_cruise + t_decel
+
+    def trap(t):
+        if t <= t_accel:
+            s = 0.5 * _DEMO_LIN_ACCEL * t ** 2
+        elif t <= t_accel + t_cruise:
+            s = d_accel + actual_max_speed * (t - t_accel)
+        elif t <= total_time:
+            td = t - t_accel - t_cruise
+            s = d_accel + d_cruise + actual_max_speed * td - 0.5 * _DEMO_LIN_ACCEL * td ** 2
+        else:
+            s = total_distance
+        return s / total_distance
+
+    path = CartesianSpace.Path()
+    for i in range(NUM_POINTS):
+        t = (i / (NUM_POINTS - 1)) * total_time
+        alpha = trap(t)
+        angle = 2 * math.pi * alpha
+        x = X0 + RADIUS * math.cos(angle)
+        y = Y0 + RADIUS * math.sin(angle)
+        path.add(CartesianSpace.Pose(position=(x, y, Z0), orientation=(0, 0, 0), time_from_start=t))
+    robot.cartesian_space.follow_path(path)
+
+
+def _demo_cone_motion(robot):
+    POSITION   = (0.25, 0.35, 0.1)
+    CONE_ANGLE = math.radians(15)
+    PERIOD     = 10.0
+    ROTATIONS  = 2
+
+    robot.joint_space.speed = _DEMO_JOINT_SPEED
+    robot.cartesian_space.move(CartesianSpace.Pose(POSITION, (0.0, CONE_ANGLE, 0.0)), enforce_linearity=False)
+
+    omega      = 2 * math.pi / PERIOD
+    total_time = PERIOD * ROTATIONS
+    t_start    = time.time()
+    while True:
+        t = time.time() - t_start
+        if t >= total_time:
+            break
+        theta     = omega * t
+        pitch     =  CONE_ANGLE * math.cos(theta)
+        roll_dot  =  CONE_ANGLE * omega * math.cos(theta)
+        pitch_dot = -CONE_ANGLE * omega * math.sin(theta)
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        robot.cartesian_space.twist([0.0, 0.0, 0.0], [-cp * roll_dot, -pitch_dot, -sp * roll_dot])
+        time.sleep(0.01)
+    robot.cartesian_space.twist([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+
+
+_DEMO_MAP = {
+    "pick_and_place": _demo_pick_and_place,
+    "sine":           _demo_sine,
+    "circle":         _demo_circle,
+    "cone_motion":    _demo_cone_motion,
+}
 
 
 def apply_deadzone(value, deadzone=0.1):
@@ -415,6 +583,8 @@ def main():
     focused_input = None
     move_thread   = None
     move_status   = ""
+    demo_thread   = None
+    demo_status   = ""
 
     saved_positions = load_positions()
     save_name_input = TextInput("pos_1", numeric_only=False)
@@ -437,6 +607,27 @@ def main():
             move_status = "Done" if ok else "Failed"
         except Exception as e:
             move_status = f"Error: {e}"
+
+    def do_demo(fn, label):
+        nonlocal demo_status, idle_mode
+        demo_status = f"Running: {label}"
+        prev_idle = idle_mode
+        idle_mode = True
+        try:
+            robot.set_idle_mode(True)
+        except Exception:
+            pass
+        try:
+            fn(robot)
+            demo_status = "Done"
+        except Exception as e:
+            demo_status = f"Error: {str(e)[:40]}"
+        finally:
+            idle_mode = prev_idle
+            try:
+                robot.set_idle_mode(prev_idle)
+            except Exception:
+                pass
 
     while True:
         screen.fill(BG_COLOR)
@@ -577,8 +768,23 @@ def main():
         use_cur_rect  = pygame.Rect(mcx + move_btn_w_px + sc(7), move_btn_y, use_cur_w, row_h)
         motion_status_y = move_btn_y + row_h + sc(8)
 
-        # Saved positions section (inside btn_card, below move status)
-        saved_sec_y      = motion_status_y + sc(26)
+        # Demo section (inside btn_card, below move status)
+        demo_sep_y    = motion_status_y + sc(22)
+        demo_sec_y    = demo_sep_y + sc(14)
+        demo_btn_h    = sc(30)
+        demo_half_w   = (mcw - sc(7)) // 2
+        demo_btn_y0   = demo_sec_y + sc(20)
+        demo_btn_y1   = demo_btn_y0 + demo_btn_h + sc(6)
+        demo_rects    = [
+            pygame.Rect(mcx,                       demo_btn_y0, demo_half_w,                demo_btn_h),
+            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y0, mcw - demo_half_w - sc(7), demo_btn_h),
+            pygame.Rect(mcx,                       demo_btn_y1, demo_half_w,                demo_btn_h),
+            pygame.Rect(mcx + demo_half_w + sc(7), demo_btn_y1, mcw - demo_half_w - sc(7), demo_btn_h),
+        ]
+        demo_status_y = demo_btn_y1 + demo_btn_h + sc(8)
+
+        # Saved positions section (inside btn_card, below demo section)
+        saved_sec_y      = demo_status_y + sc(18)
         saved_row_h      = sc(30)
         save_name_w      = int(mcw * 0.55)
         save_btns_w      = mcw - save_name_w - sc(7)
@@ -737,6 +943,21 @@ def main():
                         for inp, v in zip(move_inputs, vals):
                             inp.text = f"{v:.4f}"
                         hc = True
+                    elif not (demo_thread and demo_thread.is_alive()):
+                        _demo_defs = [
+                            (demo_rects[0], _DEMO_MAP["pick_and_place"], "Pick & Place"),
+                            (demo_rects[1], _DEMO_MAP["sine"],           "Sine Wave"),
+                            (demo_rects[2], _DEMO_MAP["circle"],         "Circle"),
+                            (demo_rects[3], _DEMO_MAP["cone_motion"],    "Cone Motion"),
+                        ]
+                        for r, fn, lbl in _demo_defs:
+                            if r.collidepoint(ep):
+                                demo_thread = threading.Thread(
+                                    target=do_demo, args=(fn, lbl), daemon=True
+                                )
+                                demo_thread.start()
+                                hc = True
+                                break
 
             # Text input focus management
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and ep is not None:
@@ -1086,6 +1307,25 @@ def main():
                 ms_color = DIM_COLOR
             ms_img = font.render(move_status, True, ms_color)
             screen.blit(ms_img, (mcx, motion_status_y))
+
+        # ── DEMO SECTION ───────────────────────────────────────────────────
+        draw_sep(screen, mcx, demo_sep_y, mcw)
+        draw_section_label(screen, sec_font, "DEMO", mcx, demo_sec_y)
+
+        _demo_running = demo_thread is not None and demo_thread.is_alive()
+        _demo_labels  = ["Pick & Place", "Sine Wave", "Circle", "Cone Motion"]
+        for r, lbl in zip(demo_rects, _demo_labels):
+            hov = r.collidepoint(mouse_pos) and not _demo_running
+            draw_btn(screen, ui_font, r, lbl, hov, br=br)
+
+        if demo_status:
+            if "Error" in demo_status:
+                _ds_color = (220, 100, 80)
+            elif "Done" in demo_status:
+                _ds_color = (0, 190, 110)
+            else:
+                _ds_color = ACCENT_COLOR
+            screen.blit(font.render(demo_status, True, _ds_color), (mcx, demo_status_y))
 
         # ── SAVED POSITIONS ────────────────────────────────────────────────
         draw_sep(screen, mcx, saved_sec_y - sc(8), mcw)

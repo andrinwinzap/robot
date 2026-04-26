@@ -11,6 +11,8 @@ import threading
 import time
 import webbrowser
 
+import math
+
 import numpy as np
 
 from robot_api import Robot
@@ -103,6 +105,173 @@ except Exception as e:
         pass
 
 # ---------------------------------------------------------------------------
+# DEMO FUNCTIONS
+# ---------------------------------------------------------------------------
+
+_DEMO_JOINT_SPEED = 0.1
+_DEMO_LIN_SPEED   = 0.03
+_DEMO_LIN_ACCEL   = 0.03
+
+
+def _demo_pick_and_place(robot):
+    START_X = 0.25;  START_Y = 0.5
+    END_X   = 0.25;  END_Y   = 0.2
+    PICK_PLACE_HEIGHT = 0.03
+    TRAVEL_HEIGHT     = 0.1
+    OBJECT_SIZE       = 0.018
+
+    robot.joint_space.speed                 = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed      = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration      = _DEMO_LIN_ACCEL
+
+    robot.tool_changer.attach_tool(robot.tools.gripper)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)), False)
+    robot.tools.gripper.set_distance(0.05)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, PICK_PLACE_HEIGHT), (0, 0, 0)))
+    robot.tools.gripper.set_distance(OBJECT_SIZE)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((START_X, START_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, PICK_PLACE_HEIGHT), (0, 0, 0)))
+    robot.tools.gripper.set_distance(0.05)
+    time.sleep(1)
+    robot.cartesian_space.move(CartesianSpace.Pose((END_X, END_Y, TRAVEL_HEIGHT), (0, 0, 0)))
+
+
+def _demo_sine(robot):
+    X0 = 0.175;  Y0 = 0.2;  Z0 = 0.1
+    WAVE_LENGTH = 0.3;  NUM_PERIODS = 2;  WAVE_AMPLITUDE = 0.03;  NUM_POINTS = 50
+
+    robot.joint_space.speed            = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration = _DEMO_LIN_ACCEL
+
+    robot.cartesian_space.move(CartesianSpace.Pose((X0, Y0, Z0), (0, 0, 0)), False)
+
+    total_distance = 0.0
+    for i in range(1000):
+        a1, a2 = i / 1000, (i + 1) / 1000
+        x1 = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * a1 * NUM_PERIODS)
+        x2 = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * a2 * NUM_PERIODS)
+        total_distance += np.sqrt((x2 - x1) ** 2 + (WAVE_LENGTH / 1000) ** 2)
+
+    t_accel = _DEMO_LIN_SPEED / _DEMO_LIN_ACCEL
+    d_accel = 0.5 * _DEMO_LIN_ACCEL * t_accel ** 2
+    if 2 * d_accel > total_distance:
+        t_accel = np.sqrt(total_distance / _DEMO_LIN_ACCEL)
+        t_cruise = 0;  d_accel = 0.5 * total_distance;  d_cruise = 0
+        actual_max_speed = _DEMO_LIN_ACCEL * t_accel
+    else:
+        d_cruise = total_distance - 2 * d_accel
+        t_cruise = d_cruise / _DEMO_LIN_SPEED
+        actual_max_speed = _DEMO_LIN_SPEED
+    t_decel = t_accel
+    total_time = t_accel + t_cruise + t_decel
+
+    def trap(t):
+        if t <= t_accel:
+            s = 0.5 * _DEMO_LIN_ACCEL * t ** 2
+        elif t <= t_accel + t_cruise:
+            s = d_accel + actual_max_speed * (t - t_accel)
+        elif t <= total_time:
+            td = t - t_accel - t_cruise
+            s = d_accel + d_cruise + actual_max_speed * td - 0.5 * _DEMO_LIN_ACCEL * td ** 2
+        else:
+            s = total_distance
+        return s / total_distance
+
+    path = CartesianSpace.Path()
+    for i in range(NUM_POINTS):
+        t = (i / (NUM_POINTS - 1)) * total_time
+        alpha = trap(t)
+        y = Y0 + alpha * WAVE_LENGTH
+        x = X0 + WAVE_AMPLITUDE * np.sin(2 * np.pi * alpha * NUM_PERIODS)
+        path.add(CartesianSpace.Pose(position=(x, y, Z0), orientation=(0, 0, 0), time_from_start=t))
+    robot.cartesian_space.follow_path(path)
+
+
+def _demo_circle(robot):
+    X0 = 0.2;  Y0 = 0.35;  Z0 = 0.1;  RADIUS = 0.07;  NUM_POINTS = 60
+
+    robot.joint_space.speed            = _DEMO_JOINT_SPEED
+    robot.cartesian_space.linear_speed = _DEMO_LIN_SPEED
+    robot.cartesian_space.acceleration = _DEMO_LIN_ACCEL
+
+    robot.cartesian_space.move(CartesianSpace.Pose((X0 + RADIUS, Y0, Z0), (0, 0, 0)), True)
+
+    total_distance = 2 * math.pi * RADIUS
+    t_accel = _DEMO_LIN_SPEED / _DEMO_LIN_ACCEL
+    d_accel = 0.5 * _DEMO_LIN_ACCEL * t_accel ** 2
+    if 2 * d_accel > total_distance:
+        t_accel = math.sqrt(total_distance / _DEMO_LIN_ACCEL)
+        t_cruise = 0;  d_accel = 0.5 * total_distance;  d_cruise = 0
+        actual_max_speed = _DEMO_LIN_ACCEL * t_accel
+    else:
+        d_cruise = total_distance - 2 * d_accel
+        t_cruise = d_cruise / _DEMO_LIN_SPEED
+        actual_max_speed = _DEMO_LIN_SPEED
+    t_decel = t_accel
+    total_time = t_accel + t_cruise + t_decel
+
+    def trap(t):
+        if t <= t_accel:
+            s = 0.5 * _DEMO_LIN_ACCEL * t ** 2
+        elif t <= t_accel + t_cruise:
+            s = d_accel + actual_max_speed * (t - t_accel)
+        elif t <= total_time:
+            td = t - t_accel - t_cruise
+            s = d_accel + d_cruise + actual_max_speed * td - 0.5 * _DEMO_LIN_ACCEL * td ** 2
+        else:
+            s = total_distance
+        return s / total_distance
+
+    path = CartesianSpace.Path()
+    for i in range(NUM_POINTS):
+        t = (i / (NUM_POINTS - 1)) * total_time
+        alpha = trap(t)
+        angle = 2 * math.pi * alpha
+        x = X0 + RADIUS * math.cos(angle)
+        y = Y0 + RADIUS * math.sin(angle)
+        path.add(CartesianSpace.Pose(position=(x, y, Z0), orientation=(0, 0, 0), time_from_start=t))
+    robot.cartesian_space.follow_path(path)
+
+
+def _demo_cone_motion(robot):
+    POSITION   = (0.25, 0.35, 0.1)
+    CONE_ANGLE = math.radians(15)
+    PERIOD     = 10.0
+    ROTATIONS  = 2
+
+    robot.joint_space.speed = _DEMO_JOINT_SPEED
+    robot.cartesian_space.move(CartesianSpace.Pose(POSITION, (0.0, CONE_ANGLE, 0.0)), enforce_linearity=False)
+
+    omega      = 2 * math.pi / PERIOD
+    total_time = PERIOD * ROTATIONS
+    t_start    = time.time()
+    while True:
+        t = time.time() - t_start
+        if t >= total_time:
+            break
+        theta     = omega * t
+        pitch     =  CONE_ANGLE * math.cos(theta)
+        roll_dot  =  CONE_ANGLE * omega * math.cos(theta)
+        pitch_dot = -CONE_ANGLE * omega * math.sin(theta)
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        robot.cartesian_space.twist([0.0, 0.0, 0.0], [-cp * roll_dot, -pitch_dot, -sp * roll_dot])
+        time.sleep(0.01)
+    robot.cartesian_space.twist([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+
+
+_DEMO_MAP = {
+    "pick_and_place": _demo_pick_and_place,
+    "sine":           _demo_sine,
+    "circle":         _demo_circle,
+    "cone_motion":    _demo_cone_motion,
+}
+
+
+# ---------------------------------------------------------------------------
 # APP STATE
 # ---------------------------------------------------------------------------
 
@@ -133,6 +302,7 @@ class AppState:
         self.last_sent_gripper_pos = None
 
         self.saved_positions = load_positions()
+        self.demo_running    = False
 
     def get_state_dict(self):
         with self.lock:
@@ -160,6 +330,7 @@ class AppState:
                 "current_tool": find_current_tool_name(),
                 "tool_names": list(tool_map.keys()),
                 "saved_positions": self.saved_positions,
+                "demo_running": self.demo_running,
             }
 
 
@@ -489,6 +660,47 @@ async def handle_ws_message(ws: WebSocket, data: dict):
                 save_positions_to_file(state.saved_positions)
             positions = state.saved_positions[:]
         await ws.send_text(json.dumps({"type": "positions", "positions": positions}))
+
+
+    elif msg_type == "run_demo":
+        demo_name = data.get("demo")
+        if demo_name not in _DEMO_MAP:
+            await ws.send_text(json.dumps({"type": "demo_status", "status": "error: unknown demo"}))
+            return
+
+        async def run_demo_task():
+            with state.lock:
+                if state.demo_running:
+                    try:
+                        await ws.send_text(json.dumps({"type": "demo_status", "status": "error: already running"}))
+                    except Exception:
+                        pass
+                    return
+                state.demo_running = True
+                prev_idle = state.idle_mode
+                state.idle_mode = True
+
+            try:
+                await ws.send_text(json.dumps({"type": "demo_status", "status": "running", "demo": demo_name}))
+            except Exception:
+                pass
+
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, _DEMO_MAP[demo_name], robot)
+                end_status = "done"
+            except Exception as e:
+                end_status = f"error: {e}"
+
+            with state.lock:
+                state.demo_running = False
+                state.idle_mode = prev_idle
+
+            try:
+                await ws.send_text(json.dumps({"type": "demo_status", "status": end_status, "demo": demo_name}))
+            except Exception:
+                pass
+
+        asyncio.create_task(run_demo_task())
 
 
 def _current_tool_name():
@@ -1044,6 +1256,26 @@ HTML_PAGE = r"""<!DOCTYPE html>
   ::-webkit-scrollbar-track { background: var(--card); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   .warn { color: #e09c28; font-size: 12px; margin-bottom: 4px; }
+  .btn-demo {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--btn);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 6px;
+    transition: background 0.1s;
+  }
+  .btn-demo:hover:not(:disabled) { background: var(--hover); }
+  .btn-demo:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-demo.active { background: #00365a; border-color: var(--accent); color: var(--accent); }
+  .demo-status { font-size: 12px; color: var(--dim); margin-top: 2px; height: 16px; }
+  .demo-status.run { color: var(--accent); }
+  .demo-status.ok  { color: #00be6e; }
+  .demo-status.err { color: #dc6450; }
 </style>
 </head>
 <body>
@@ -1092,6 +1324,14 @@ HTML_PAGE = r"""<!DOCTYPE html>
         <button class="btn-set" id="btn-grip-set">SET</button>
       </div>
     </div>
+
+    <hr class="sep"/>
+    <div class="section-label">Demo</div>
+    <button class="btn-demo" id="demo-pick-place">Pick &amp; Place</button>
+    <button class="btn-demo" id="demo-sine">Sine Wave</button>
+    <button class="btn-demo" id="demo-circle">Circle</button>
+    <button class="btn-demo" id="demo-cone">Cone Motion</button>
+    <div class="demo-status" id="demo-status">Idle</div>
   </div>
 
   <!-- RIGHT PANEL -->
@@ -1208,6 +1448,9 @@ function handleMessage(msg) {
       fillMoveInputs(msg.values);
       if (msg.mode) { S.motion_mode = msg.mode; updateMotionModeUI(); }
       break;
+    case 'demo_status':
+      handleDemoStatus(msg);
+      break;
   }
 }
 
@@ -1246,6 +1489,13 @@ function applyFullState() {
 
   // gripper input
   document.getElementById('inp-gripper-pos').value = S.gripper_pos.toFixed(4);
+
+  // demo state
+  setDemoBtnsDisabled(!!S.demo_running);
+  if (S.demo_running) {
+    const el = document.getElementById('demo-status');
+    if (el) { el.textContent = 'Running...'; el.className = 'demo-status run'; }
+  }
 }
 
 // ============================================================
@@ -1664,6 +1914,46 @@ document.getElementById('btn-cancel-edit').onclick = () => {
   document.getElementById('btn-cancel-edit').style.display = 'none';
   renderSavedPositions();
 };
+
+// ============================================================
+// DEMO
+// ============================================================
+const DEMO_LABELS = {
+  pick_and_place: 'Pick & Place',
+  sine:           'Sine Wave',
+  circle:         'Circle',
+  cone_motion:    'Cone Motion',
+};
+
+function setDemoBtnsDisabled(disabled) {
+  document.querySelectorAll('.btn-demo').forEach(b => {
+    b.disabled = disabled;
+    b.classList.toggle('active', disabled);
+  });
+}
+
+function handleDemoStatus(msg) {
+  const el = document.getElementById('demo-status');
+  if (!el) return;
+  if (msg.status === 'running') {
+    el.textContent = 'Running: ' + (DEMO_LABELS[msg.demo] || msg.demo);
+    el.className = 'demo-status run';
+    setDemoBtnsDisabled(true);
+  } else if (msg.status === 'done') {
+    el.textContent = 'Done';
+    el.className = 'demo-status ok';
+    setDemoBtnsDisabled(false);
+  } else {
+    el.textContent = msg.status;
+    el.className = 'demo-status err';
+    setDemoBtnsDisabled(false);
+  }
+}
+
+document.getElementById('demo-pick-place').onclick = () => send({type:'run_demo', demo:'pick_and_place'});
+document.getElementById('demo-sine').onclick        = () => send({type:'run_demo', demo:'sine'});
+document.getElementById('demo-circle').onclick      = () => send({type:'run_demo', demo:'circle'});
+document.getElementById('demo-cone').onclick        = () => send({type:'run_demo', demo:'cone_motion'});
 
 // ============================================================
 // INPUT FOCUS TRACKING (disable keyboard movement when typing)

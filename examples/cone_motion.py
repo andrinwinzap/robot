@@ -3,8 +3,8 @@ import time
 from robot_api import Robot, CartesianSpace
 
 # --- Parameters ---
-POSITION = (0.25, 0.5, 0.1)    # Fixed end-effector position (x, y, z) in meters
-CONE_ANGLE = math.radians(20)  # Half-angle of the cone
+POSITION = (0.2, 0.5, 0.1)    # Fixed end-effector position (x, y, z) in meters
+CONE_ANGLE = math.radians(15)  # Half-angle of the cone
 PERIOD = 10.0                   # Time (seconds) to complete one full revolution
 ROTATIONS = 2                   # Number of full revolutions
 

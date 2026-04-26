@@ -16,13 +16,13 @@ def pick_and_place(robot):
     START_X = 0.25
     START_Y = 0.5
 
-    END_X = 0.2
-    END_Y = 0.6
+    END_X = 0.25
+    END_Y = 0.2
 
-    PICK_PLACE_HEIGHT = 0.04
+    PICK_PLACE_HEIGHT = 0.03
     TRAVEL_HEIGHT = 0.1
 
-    OBJECT_SIZE = 0.02
+    OBJECT_SIZE = 0.018
     ########################################
 
     robot.joint_space.speed = JOINT_SPACE_SPEED

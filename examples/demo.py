@@ -253,7 +253,7 @@ def circle(robot):
 def cone_motion(robot):
 
     ########################################
-    POSITION = (0.2, 0.5, 0.1)
+    POSITION = (0.25, 0.35, 0.1)
     CONE_ANGLE = math.radians(15)
     PERIOD = 10.0
     ROTATIONS = 2
